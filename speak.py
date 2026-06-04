@@ -3,8 +3,8 @@ from datetime import datetime
 from string import Formatter
 from zoneinfo import ZoneInfo
 
-from audio import generate_speech, prepend_chime, write_audio
-from config import DEFAULT_TEMPLATE, OUTPUT_AUDIO
+from audio import generate_speech, play_audio, prepend_chime
+from config import DEFAULT_TEMPLATE
 from formatting import date_to_words, number_to_words, percent_to_words, time_to_words, wind_to_words
 from location import get_location
 from weather import get_weather
@@ -111,8 +111,7 @@ def main():
     speech, sr = generate_speech(announcement)
     combined = prepend_chime(speech, sr)
 
-    write_audio(OUTPUT_AUDIO, combined, sr)
-    print(f"Wrote {OUTPUT_AUDIO}")
+    play_audio(combined, sr)
 
 
 if __name__ == "__main__":

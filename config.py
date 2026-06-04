@@ -3,7 +3,6 @@ from pathlib import Path
 ASSETS_DIR = Path("assets")
 CHIME_AUDIO = ASSETS_DIR / "startup3.mp3"
 REFERENCE_AUDIO = ASSETS_DIR / "reference.wav"
-OUTPUT_AUDIO = Path("announcement.wav")
 
 DEFAULT_TEMPLATE = "It is {time} on {weekday}, {date}. In {location}, it is {weather_condition} and {current_temp} degrees."
 

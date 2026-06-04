@@ -1,6 +1,7 @@
 import math
 
 import numpy as np
+import sounddevice as sd
 import soundfile as sf
 from scipy.signal import resample_poly
 
@@ -46,5 +47,6 @@ def prepend_chime(speech, speech_sr):
     return np.concatenate([chime, speech])
 
 
-def write_audio(path, samples, sample_rate):
-    sf.write(path, samples, sample_rate)
+def play_audio(samples, sample_rate):
+    sd.play(samples, sample_rate)
+    sd.wait()
