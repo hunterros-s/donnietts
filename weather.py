@@ -40,17 +40,23 @@ def get_weather(lat, lon):
             "latitude": lat,
             "longitude": lon,
             "current": "temperature_2m,weather_code,wind_speed_10m",
+            "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max",
             "temperature_unit": "fahrenheit",
             "wind_speed_unit": "mph",
             "timezone": "auto",
+            "forecast_days": 1,
         }
     )
     data = fetch_json(f"https://api.open-meteo.com/v1/forecast?{query}")
     current = data["current"]
+    daily = data.get("daily", {})
 
     return {
-        "temperature": round(current["temperature_2m"]),
-        "condition": WEATHER_CODES.get(current["weather_code"], "unknown conditions"),
-        "wind_speed": current["wind_speed_10m"],
+        "weather_condition": WEATHER_CODES.get(current["weather_code"], "unknown conditions"),
+        "current_temp": round(current["temperature_2m"]),
+        "high_temp": round(daily["temperature_2m_max"][0]) if daily.get("temperature_2m_max") else None,
+        "low_temp": round(daily["temperature_2m_min"][0]) if daily.get("temperature_2m_min") else None,
+        "wind_speed": round(current["wind_speed_10m"]),
+        "precip_chance": round(daily["precipitation_probability_max"][0]) if daily.get("precipitation_probability_max") else None,
         "timezone": data.get("timezone"),
     }

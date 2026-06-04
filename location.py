@@ -3,7 +3,7 @@ from urllib.parse import urlencode
 from utils import fetch_json
 
 
-def detect_location():
+def detect_coordinates():
     data = fetch_json("https://ipapi.co/json/")
     lat = data.get("latitude")
     lon = data.get("longitude")
@@ -29,7 +29,19 @@ def reverse_geocode(lat, lon):
         or address.get("county")
     )
     state = address.get("state")
+    location = f"{city}, {state}" if city and state else city or state or data.get("display_name", "your current location")
 
-    if city and state:
-        return f"{city}, {state}"
-    return city or state or data.get("display_name", "your current location")
+    return {
+        "location": location,
+        "city": city or "",
+        "state": state or "",
+        "latitude": lat,
+        "longitude": lon,
+    }
+
+
+def get_location():
+    lat, lon = detect_coordinates()
+    location = reverse_geocode(lat, lon)
+    print(f"Detected location: {location['location']} ({lat:.4f}, {lon:.4f})")
+    return location

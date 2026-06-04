@@ -87,7 +87,11 @@ def time_to_words(now):
 
 
 def date_to_words(now):
-    return f"{now.strftime('%A')}, {now.strftime('%B')} {ORDINAL_DAYS[now.day]}"
+    return f"{now.strftime('%B')} {ORDINAL_DAYS[now.day]}"
+
+
+def percent_to_words(percent):
+    return f"{number_to_words(percent)} percent"
 
 
 def wind_to_words(mph):
