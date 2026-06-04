@@ -1,0 +1,50 @@
+import math
+
+import numpy as np
+import soundfile as sf
+from scipy.signal import resample_poly
+
+from config import CHIME_AUDIO, QWEN_MODEL, REFERENCE_AUDIO, REFERENCE_TEXT
+
+
+def generate_speech(text):
+    import torch
+    from qwen_tts import Qwen3TTSModel
+
+    model = Qwen3TTSModel.from_pretrained(
+        QWEN_MODEL,
+        device_map="cpu",
+        dtype=torch.float32,
+        attn_implementation="sdpa",
+    )
+
+    voice_prompt = model.create_voice_clone_prompt(
+        ref_audio=str(REFERENCE_AUDIO),
+        ref_text=REFERENCE_TEXT,
+        x_vector_only_mode=False,
+    )
+
+    wavs, sr = model.generate_voice_clone(
+        text=text,
+        language="English",
+        voice_clone_prompt=voice_prompt,
+    )
+
+    return np.asarray(wavs[0]), sr
+
+
+def prepend_chime(speech, speech_sr):
+    chime, chime_sr = sf.read(CHIME_AUDIO)
+
+    if chime.ndim > 1:
+        chime = chime.mean(axis=1)
+
+    if chime_sr != speech_sr:
+        gcd = math.gcd(chime_sr, speech_sr)
+        chime = resample_poly(chime, speech_sr // gcd, chime_sr // gcd)
+
+    return np.concatenate([chime, speech])
+
+
+def write_audio(path, samples, sample_rate):
+    sf.write(path, samples, sample_rate)
