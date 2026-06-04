@@ -1,14 +1,4 @@
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
-from formatting import (
-    date_to_words,
-    number_to_words,
-    optional_number_to_words,
-    optional_percent_to_words,
-    time_to_words,
-    wind_to_words,
-)
+from formatting import date_to_words, number_to_words, percent_to_words, time_to_words, wind_to_words
 from location import get_location
 from weather import get_weather
 
@@ -43,18 +33,17 @@ def build_weather_context(location_context):
     return {
         "weather_condition": weather["weather_condition"],
         "current_temp": number_to_words(weather["current_temp"]),
-        "high_temp": optional_number_to_words(weather["high_temp"]),
-        "low_temp": optional_number_to_words(weather["low_temp"]),
+        "high_temp": number_to_words(weather["high_temp"]),
+        "low_temp": number_to_words(weather["low_temp"]),
         "wind": wind_to_words(weather["wind_speed"]),
         "wind_speed": number_to_words(weather["wind_speed"]),
-        "precip_chance": optional_percent_to_words(weather["precip_chance"]),
-        "timezone": weather.get("timezone"),
+        "precip_chance": percent_to_words(weather["precip_chance"]),
+        "timezone": weather["timezone"],
     }
 
 
-def build_template_context(fields):
+def build_template_context(fields, now):
     context = {}
-    now = datetime.now()
 
     needs_location = bool(fields & LOCATION_FIELDS)
     needs_weather = bool(fields & WEATHER_FIELDS)
@@ -66,8 +55,6 @@ def build_template_context(fields):
         if needs_weather:
             weather_context = build_weather_context(location_context)
             context.update(weather_context)
-            if weather_context.get("timezone"):
-                now = datetime.now(ZoneInfo(weather_context["timezone"]))
 
     context.update(
         {

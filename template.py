@@ -15,9 +15,9 @@ def normalize_text(text):
     return " ".join(text.split())
 
 
-def render_template(template):
+def render_template(template, now):
     fields = template_fields(template)
-    context = build_template_context(fields)
+    context = build_template_context(fields, now)
 
     try:
         return normalize_text(template.format(**context))

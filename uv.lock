@@ -409,12 +409,14 @@ name = "donnietts"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "pyyaml" },
     { name = "qwen-tts" },
     { name = "sounddevice" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "qwen-tts", specifier = ">=0.1.1" },
     { name = "sounddevice", specifier = ">=0.5.5" },
 ]

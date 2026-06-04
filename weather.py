@@ -52,11 +52,11 @@ def get_weather(lat, lon):
     daily = data.get("daily", {})
 
     return {
-        "weather_condition": WEATHER_CODES.get(current["weather_code"], "unknown conditions"),
+        "weather_condition": WEATHER_CODES[current["weather_code"]],
         "current_temp": round(current["temperature_2m"]),
-        "high_temp": round(daily["temperature_2m_max"][0]) if daily.get("temperature_2m_max") else None,
-        "low_temp": round(daily["temperature_2m_min"][0]) if daily.get("temperature_2m_min") else None,
+        "high_temp": round(daily["temperature_2m_max"][0]),
+        "low_temp": round(daily["temperature_2m_min"][0]),
         "wind_speed": round(current["wind_speed_10m"]),
-        "precip_chance": round(daily["precipitation_probability_max"][0]) if daily.get("precipitation_probability_max") else None,
-        "timezone": data.get("timezone"),
+        "precip_chance": round(daily["precipitation_probability_max"][0]),
+        "timezone": data["timezone"],
     }

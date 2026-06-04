@@ -94,14 +94,6 @@ def percent_to_words(percent):
     return f"{number_to_words(percent)} percent"
 
 
-def optional_number_to_words(value):
-    return number_to_words(value) if value is not None else ""
-
-
-def optional_percent_to_words(value):
-    return percent_to_words(value) if value is not None else ""
-
-
 def wind_to_words(mph):
     if mph < 1:
         return "calm wind"
