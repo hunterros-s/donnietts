@@ -111,7 +111,10 @@ def main():
     speech, sr = generate_speech(announcement)
     combined = prepend_chime(speech, sr)
 
-    play_audio(combined, sr)
+    try:
+        play_audio(combined, sr)
+    except Exception as exc:
+        raise SystemExit(f"Playback failed: {exc}") from exc
 
 
 if __name__ == "__main__":
