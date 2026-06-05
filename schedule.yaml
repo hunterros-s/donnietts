@@ -3,30 +3,43 @@ defaults:
 
 announcements:
   - time: "08:00"
-    template: "Good morning. It is {time} on {weekday}, {date}. In {location}, it is {weather_condition} and {current_temp} degrees. The high today is {high_temp}."
+    template: "Good morning. The time is {time}. Today is {weekday}, {date}. Currently in {location}, it is {weather_condition} and {current_temp} degrees. Today's high is {high_temp} degrees."
+
   - time: "09:00"
-    template: "It is {time} on {weekday}, {date}. In {location}, it is {weather_condition} and {current_temp} degrees. The high today is {high_temp}."
+    template: "The time is {time}. Today is {weekday}, {date}. The temperature is {current_temp} degrees."
+
   - time: "10:00"
-    template: "It is {time} on {weekday}, {date}. In {location}, it is {weather_condition} and {current_temp} degrees. The high today is {high_temp}."
+    template: "This is your ten o'clock update. Today is {weekday}, {date}. Current conditions are {weather_condition}."
+
   - time: "11:00"
-    template: "It is {time} on {weekday}, {date}. In {location}, it is {weather_condition} and {current_temp} degrees. The high today is {high_temp}."
+    template: "The current time is {time}. Today is {weekday}, {date}. Currently in {location}, it is {current_temp} degrees."
+
   - time: "12:00"
-    template: "It is {time} on {weekday}, {date}. In {location}, it is {weather_condition} and {current_temp} degrees. The high today is {high_temp}."
+    template: "It is noon. Today is {weekday}, {date}. Currently in {location}, it is {weather_condition} and {current_temp} degrees."
+
   - time: "13:00"
-    template: "It is {time} on {weekday}, {date}. In {location}, it is {weather_condition} and {current_temp} degrees. The high today is {high_temp}."
+    template: "This is your afternoon update. The time is {time}. Today is {weekday}, {date}. Today's high is {high_temp} degrees."
+
   - time: "14:00"
-    template: "It is {time} on {weekday}, {date}. In {location}, it is {weather_condition} and {current_temp} degrees. The high today is {high_temp}."
+    template: "The time now is {time}. Today is {weekday}, {date}. The weather is {weather_condition}."
+
   - time: "15:00"
-    template: "It is {time} on {weekday}, {date}. in {location}, it is {weather_condition} and {current_temp} degrees. the high today is {high_temp}."
+    template: "Here is your three o'clock update. Today is {weekday}, {date}. The temperature is {current_temp} degrees."
+
   - time: "16:00"
-    template: "It is {time} on {weekday}, {date}. in {location}, it is {weather_condition} and {current_temp} degrees. the high today is {high_temp}."
+    template: "The current time is {time}. Today is {weekday}, {date}. Currently in {location}, it is {current_temp} degrees."
+
   - time: "17:00"
-    template: "It is {time} on {weekday}, {date}. in {location}, it is {weather_condition} and {current_temp} degrees."
+    template: "This is your five o'clock update. Today is {weekday}, {date}. Current conditions are {weather_condition}."
+
   - time: "18:00"
-    template: "Good evening. It is {time} on {weekday}, {date}. in {location}, it is {weather_condition} and {current_temp} degrees."
+    template: "Good evening. The time is {time}. Today is {weekday}, {date}. Currently in {location}, it is {current_temp} degrees."
+
   - time: "19:00"
-    template: "It is {time} on {weekday}, {date}."
+    template: "Evening check-in. The time is {time}. Today is {weekday}, {date}."
+
   - time: "20:00"
-    template: "It is {time} on {weekday}, {date}."
+    template: "The time now is {time}. Today is {weekday}, {date}."
+
   - time: "21:00"
-    template: "Good night. It is {time} on {weekday}, {date}."
+    template: "Good night. The time is {time}. Today is {weekday}, {date}."
