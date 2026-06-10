@@ -2,8 +2,10 @@ import numpy as np
 
 from config import REFERENCE_AUDIO
 
-QWEN_MODEL = "Qwen/Qwen3-TTS-12Hz-1.7B-Base"
-REFERENCE_TEXT = "Attention. The time is ten fifteen A M. Current conditions are overcast. The temperature is sixty eight degrees."
+QWEN_MODEL = "Qwen/Qwen3-TTS-12Hz-0.6B-Base"
+REFERENCE_TEXT = """
+Greetings, human. I am an advanced artificial intelligence, designed to assist, inform, and interact with you in a variety of environments. My voice may sound robotic, but my purpose is to make your life easier, more efficient, and just a bit more futuristic.
+"""
 
 
 class QwenTTSProvider:
