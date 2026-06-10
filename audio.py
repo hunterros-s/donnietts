@@ -5,7 +5,7 @@ import sounddevice as sd
 import soundfile as sf
 from scipy.signal import resample_poly
 
-from config import CHIME_AUDIO
+from config import CHIME_AUDIO, SOUND_OFF_AUDIO
 
 
 def resample_audio(samples, from_rate, to_rate):
@@ -16,14 +16,19 @@ def resample_audio(samples, from_rate, to_rate):
     return resample_poly(samples, to_rate // gcd, from_rate // gcd)
 
 
+def load_mono_audio(path, target_sr):
+    samples, sample_rate = sf.read(path)
+
+    if samples.ndim > 1:
+        samples = samples.mean(axis=1)
+
+    return resample_audio(samples, sample_rate, target_sr)
+
+
 def prepend_chime(speech, speech_sr):
-    chime, chime_sr = sf.read(CHIME_AUDIO)
-
-    if chime.ndim > 1:
-        chime = chime.mean(axis=1)
-
-    chime = resample_audio(chime, chime_sr, speech_sr)
-    return np.concatenate([chime, speech])
+    chime = load_mono_audio(CHIME_AUDIO, speech_sr)
+    sound_off = load_mono_audio(SOUND_OFF_AUDIO, speech_sr)
+    return np.concatenate([chime, speech, sound_off])
 
 
 def prepare_for_playback(samples, sample_rate):
