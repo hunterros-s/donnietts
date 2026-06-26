@@ -7,7 +7,7 @@ REFERENCE_AUDIO = ASSETS_DIR / "voice_sample.wav"
 SCHEDULE_FILE = Path("schedule.yaml")
 
 DEFAULT_TEMPLATE = (
-    "This is your current briefing for {weekday}, {date}. The time is {time}. "
+    "Hi Donnie. This is your current briefing for {weekday}, {date}. The time is {time}. "
     "In {location}, conditions are currently {weather_condition}, with a temperature of {current_temp} degrees. "
     "Today's forecast calls for a high near {high_temp} degrees and a low near {low_temp} degrees. "
     "Winds are at {wind}, and the chance of precipitation today is {precip_chance}. "
