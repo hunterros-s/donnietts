@@ -4,112 +4,84 @@ defaults:
 announcements:
   - time: "08:00"
     template: >-
-      Hi Donnie. Good morning. This is your morning briefing for {weekday}, {date}. The time is {time}.
-      In {location}, conditions are currently {weather_condition}, with a temperature of {current_temp} degrees.
-      Today's forecast calls for a high near {high_temp} degrees and a low near {low_temp} degrees.
-      Winds are at {wind}, and the chance of precipitation today is {precip_chance}.
-      Plan accordingly, and have a productive morning.
+      Hi Donnie. Good morning. It is {time} on {weekday}, {date}.
+      In {location}, the morning is {weather_condition} and {current_temp} degrees.
+      The forecast high is {high_temp} degrees, the low is {low_temp} degrees, wind is {wind}, and precipitation chance is {precip_chance}.
 
   - time: "09:00"
     template: >-
-      Hi Donnie. This is your nine o'clock status update. The current time is {time} on {weekday}, {date}.
-      In {location}, the weather is {weather_condition}, and the temperature is {current_temp} degrees.
-      The expected high for today is {high_temp} degrees, with a low of {low_temp} degrees.
-      Winds are currently {wind}, and the chance of precipitation is {precip_chance}.
-      You are now entering the main part of the morning.
+      Hi Donnie. Nine o'clock update for {weekday}, {date}.
+      {location} is currently {current_temp} degrees with {weather_condition} conditions.
+      Today's range is {low_temp} to {high_temp} degrees, with wind at {wind}.
 
   - time: "10:00"
     template: >-
-      Hi Donnie. Attention. This is your ten o'clock update for {weekday}, {date}. The time is {time}.
-      Current conditions in {location} are {weather_condition}, with the temperature at {current_temp} degrees.
-      Today's high is expected to reach {high_temp} degrees, and the low is expected to be {low_temp} degrees.
-      Wind conditions are {wind}, with a precipitation chance of {precip_chance}.
-      Continue with the day knowing the latest environmental conditions.
+      Hi Donnie. It is {time}.
+      Current weather in {location}: {weather_condition}, {current_temp} degrees, wind {wind}.
+      The chance of precipitation today is {precip_chance}, with a high near {high_temp} degrees.
 
   - time: "11:00"
     template: >-
-      Hi Donnie. This is your late morning briefing. It is {time} on {weekday}, {date}.
-      The current report for {location} shows {weather_condition} conditions and a temperature of {current_temp} degrees.
-      The forecast high is {high_temp} degrees, and the forecast low is {low_temp} degrees.
-      Winds are at {wind}, and the chance of precipitation remains {precip_chance}.
-      The morning is nearly complete; prepare for the transition into midday.
+      Hi Donnie. Late morning briefing for {weekday}, {date}.
+      In {location}, it is {current_temp} degrees and {weather_condition}.
+      The forecast still shows a high of {high_temp} degrees and a low of {low_temp} degrees.
 
   - time: "12:00"
     template: >-
-      Hi Donnie. Good afternoon. It is noon on {weekday}, {date}. This is your midday briefing.
-      In {location}, conditions are currently {weather_condition}, with a temperature of {current_temp} degrees.
-      Today's expected high is {high_temp} degrees, and the expected low is {low_temp} degrees.
-      Wind is currently {wind}, and the chance of precipitation today is {precip_chance}.
-      Take a moment to reset, review your priorities, and continue into the afternoon.
+      Hi Donnie. Good afternoon. It is noon on {weekday}, {date}.
+      Conditions in {location} are {weather_condition}, with the temperature at {current_temp} degrees.
+      Wind is {wind}, and precipitation chance is {precip_chance}.
 
   - time: "13:00"
     template: >-
-      Hi Donnie. This is your one o'clock afternoon update. The time is {time} on {weekday}, {date}.
-      In {location}, the current weather is {weather_condition}, and the temperature is {current_temp} degrees.
-      The daily high is forecast at {high_temp} degrees, with a low near {low_temp} degrees.
-      Winds are at {wind}, and the chance of precipitation is {precip_chance}.
-      The afternoon is underway; keep moving steadily through the next block of the day.
+      Hi Donnie. One o'clock report.
+      {location} is at {current_temp} degrees under {weather_condition} skies.
+      Today is expected to top out near {high_temp} degrees and fall to {low_temp} degrees.
 
   - time: "14:00"
     template: >-
-      Hi Donnie. Attention. This is your two o'clock briefing for {weekday}, {date}. The current time is {time}.
-      Conditions in {location} are {weather_condition}, with the temperature now at {current_temp} degrees.
-      The forecast indicates a high of {high_temp} degrees and a low of {low_temp} degrees.
-      Current wind conditions are {wind}, and precipitation chance is {precip_chance}.
-      Use this update to stay aware of the weather and the progress of the afternoon.
+      Hi Donnie. It is {time} on {weekday}, {date}.
+      The afternoon reading in {location} is {current_temp} degrees with {weather_condition} conditions.
+      Wind is {wind}; precipitation chance remains {precip_chance}.
 
   - time: "15:00"
     template: >-
-      Hi Donnie. This is your three o'clock update. It is {time} on {weekday}, {date}.
-      The current conditions in {location} are {weather_condition}, with a temperature of {current_temp} degrees.
-      Today's high is {high_temp} degrees, and the low is {low_temp} degrees.
-      Winds are currently {wind}, and the precipitation chance is {precip_chance}.
-      You are now in the later part of the afternoon; check your remaining priorities for the day.
+      Hi Donnie. Three o'clock update.
+      In {location}, the temperature is {current_temp} degrees and the weather is {weather_condition}.
+      The daily high is {high_temp} degrees, with tonight's low near {low_temp} degrees.
 
   - time: "16:00"
     template: >-
-      Hi Donnie. This is your four o'clock late afternoon briefing. The time is {time} on {weekday}, {date}.
-      In {location}, conditions are {weather_condition}, and the temperature is {current_temp} degrees.
-      The expected high for today is {high_temp} degrees, with an expected low of {low_temp} degrees.
-      Wind is currently {wind}, and the chance of precipitation is {precip_chance}.
-      The workday is approaching its final stretch; proceed with focus and awareness.
+      Hi Donnie. Four o'clock briefing for {weekday}, {date}.
+      Current conditions in {location}: {weather_condition}, {current_temp} degrees.
+      Wind is {wind}, and the chance of precipitation is {precip_chance}.
 
   - time: "17:00"
     template: >-
-      Hi Donnie. This is your five o'clock update for {weekday}, {date}. The current time is {time}.
-      Weather conditions in {location} are {weather_condition}, with the temperature at {current_temp} degrees.
-      Today's high is {high_temp} degrees, and tonight's low is expected to be {low_temp} degrees.
-      Winds are at {wind}, and the chance of precipitation is {precip_chance}.
-      The evening transition is beginning; wrap up outstanding tasks and prepare for what comes next.
+      Hi Donnie. It is {time}.
+      In {location}, evening conditions are beginning at {current_temp} degrees with {weather_condition} weather.
+      Today's high is {high_temp} degrees, and the low tonight is expected to be {low_temp} degrees.
 
   - time: "18:00"
     template: >-
-      Hi Donnie. Good evening. This is your six o'clock briefing for {weekday}, {date}. The time is {time}.
-      In {location}, current conditions are {weather_condition}, with a temperature of {current_temp} degrees.
-      The high today is {high_temp} degrees, and the low is expected to be {low_temp} degrees.
-      Winds are currently {wind}, and the chance of precipitation is {precip_chance}.
-      The evening is now underway; take a moment to settle in and review the rest of the night.
+      Hi Donnie. Good evening. Six o'clock weather for {location}.
+      It is currently {current_temp} degrees and {weather_condition}.
+      Wind is {wind}, with precipitation chance at {precip_chance}.
 
   - time: "19:00"
     template: >-
-      Hi Donnie. This is your seven o'clock evening check-in. It is {time} on {weekday}, {date}.
-      Conditions in {location} are currently {weather_condition}, and the temperature is {current_temp} degrees.
-      Today's high was {high_temp} degrees, and the overnight low is expected to be {low_temp} degrees.
-      Wind conditions are {wind}, with a precipitation chance of {precip_chance}.
-      The day is winding down; adjust your plans for the evening based on the current conditions.
+      Hi Donnie. Seven o'clock check-in on {weekday}, {date}.
+      {location} is reporting {weather_condition} conditions and {current_temp} degrees.
+      The overnight low is expected to be {low_temp} degrees.
 
   - time: "20:00"
     template: >-
-      Hi Donnie. This is your eight o'clock evening update. The current time is {time} on {weekday}, {date}.
-      In {location}, the weather is {weather_condition}, with a temperature of {current_temp} degrees.
-      The forecast low is {low_temp} degrees, following a daytime high of {high_temp} degrees.
-      Winds are at {wind}, and the chance of precipitation is {precip_chance}.
-      The evening is progressing; prepare for the final part of the day.
+      Hi Donnie. It is {time}.
+      The evening forecast in {location} is {weather_condition}, currently {current_temp} degrees.
+      Wind is {wind}, and precipitation chance is {precip_chance}.
 
   - time: "21:00"
     template: >-
-      Hi Donnie. Good night. This is your final scheduled briefing for {weekday}, {date}. The time is {time}.
-      In {location}, current conditions are {weather_condition}, with the temperature at {current_temp} degrees.
-      The low tonight is expected to be {low_temp} degrees, after a high of {high_temp} degrees today.
-      Winds are currently {wind}, and the chance of precipitation is {precip_chance}.
-      Begin winding down, secure what needs to be secured, and prepare for rest.
+      Hi Donnie. Good night. Final briefing for {weekday}, {date}.
+      In {location}, it is {current_temp} degrees with {weather_condition} conditions.
+      Tonight's low is expected to be {low_temp} degrees.
