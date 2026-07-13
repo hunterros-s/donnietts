@@ -6,8 +6,9 @@ from sqlalchemy import delete, event, select, text, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
+from donnietts.announcement_runs import AnnouncementRunRepository, CANCELLABLE_STATUSES
 from donnietts.migration_runner import schema_head_revision
-from donnietts.models import Announcement, ApplicationSettings
+from donnietts.models import Announcement, AnnouncementRun, ApplicationSettings
 from donnietts.settings import ControllerSettings
 
 
@@ -66,6 +67,7 @@ class Database:
     def __init__(self, settings: ControllerSettings):
         self.engine: AsyncEngine = create_async_engine(settings.database_url)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
+        self.runs = AnnouncementRunRepository(self.sessions)
         self.schema_head = schema_head_revision()
 
         @event.listens_for(self.engine.sync_engine, "connect")
@@ -261,6 +263,20 @@ class Database:
                     f"Announcement {announcement_id} has revision {current.revision}, "
                     f"not {expected_revision}"
                 )
+            now = datetime.now(UTC)
+            await session.execute(
+                update(AnnouncementRun)
+                .where(
+                    AnnouncementRun.announcement_id == announcement_id,
+                    AnnouncementRun.status.in_(CANCELLABLE_STATUSES),
+                )
+                .values(
+                    status="cancelled",
+                    outcome_reason="announcement deleted",
+                    updated_at=now,
+                    finished_at=now,
+                )
+            )
             result = await session.execute(
                 delete(Announcement)
                 .where(
