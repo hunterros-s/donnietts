@@ -1,5 +1,7 @@
 from urllib.parse import urlencode
 
+import httpx
+
 from utils import fetch_json
 
 WEATHER_CODES = {
@@ -34,7 +36,7 @@ WEATHER_CODES = {
 }
 
 
-def get_weather(lat, lon):
+async def get_weather(client: httpx.AsyncClient, lat, lon):
     query = urlencode(
         {
             "latitude": lat,
@@ -47,7 +49,7 @@ def get_weather(lat, lon):
             "forecast_days": 1,
         }
     )
-    data = fetch_json(f"https://api.open-meteo.com/v1/forecast?{query}")
+    data = await fetch_json(client, f"https://api.open-meteo.com/v1/forecast?{query}")
     current = data["current"]
     daily = data.get("daily", {})
 

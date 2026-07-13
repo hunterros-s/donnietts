@@ -1,3 +1,5 @@
+import httpx
+
 from utils import fetch_json
 
 DISPLAY_CITY = "edwardsburg"
@@ -5,8 +7,8 @@ DISPLAY_STATE = "michigan"
 DISPLAY_LOCATION = f"{DISPLAY_CITY}, {DISPLAY_STATE}"
 
 
-def detect_coordinates():
-    data = fetch_json("https://ipapi.co/json/")
+async def detect_coordinates(client: httpx.AsyncClient):
+    data = await fetch_json(client, "https://ipapi.co/json/")
     lat = data.get("latitude")
     lon = data.get("longitude")
 
@@ -17,8 +19,8 @@ def detect_coordinates():
     return float(lat), float(lon)
 
 
-def get_location():
-    lat, lon = detect_coordinates()
+async def get_location(client: httpx.AsyncClient):
+    lat, lon = await detect_coordinates(client)
     location = {
         "location": DISPLAY_LOCATION,
         "city": DISPLAY_CITY,

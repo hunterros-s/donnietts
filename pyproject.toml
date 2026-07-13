@@ -10,7 +10,6 @@ dependencies = [
     "fastapi>=0.116.0,<1",
     "httpx>=0.28.0,<1",
     "numpy>=2.0.0",
-    "openai>=2.0.0,<3",
     "pyyaml>=6.0.3",
     "scipy>=1.14.0",
     "sounddevice>=0.5.5",
@@ -36,4 +35,5 @@ build-backend = "uv_build"
 module-name = "donnietts"
 
 [tool.pytest.ini_options]
+pythonpath = ["."]
 testpaths = ["tests"]

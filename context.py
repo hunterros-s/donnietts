@@ -1,3 +1,5 @@
+import httpx
+
 from donnietts.template_validation import (
     AVAILABLE_FIELDS,
     LOCATION_FIELDS,
@@ -15,8 +17,8 @@ from location import get_location
 from weather import get_weather
 
 
-def build_location_context():
-    location = get_location()
+async def build_location_context(client: httpx.AsyncClient):
+    location = await get_location(client)
     return {
         "location": location["location"],
         "city": location["city"],
@@ -26,8 +28,12 @@ def build_location_context():
     }
 
 
-def build_weather_context(location_context):
-    weather = get_weather(location_context["latitude"], location_context["longitude"])
+async def build_weather_context(client: httpx.AsyncClient, location_context):
+    weather = await get_weather(
+        client,
+        location_context["latitude"],
+        location_context["longitude"],
+    )
     return {
         "weather_condition": weather["weather_condition"],
         "current_temp": number_to_words(weather["current_temp"]),
@@ -40,18 +46,18 @@ def build_weather_context(location_context):
     }
 
 
-def build_template_context(fields, now):
+async def build_template_context(client: httpx.AsyncClient, fields, now):
     context = {}
 
     needs_location = bool(fields & LOCATION_FIELDS)
     needs_weather = bool(fields & WEATHER_FIELDS)
 
     if needs_location or needs_weather:
-        location_context = build_location_context()
+        location_context = await build_location_context(client)
         context.update(location_context)
 
         if needs_weather:
-            weather_context = build_weather_context(location_context)
+            weather_context = await build_weather_context(client, location_context)
             context.update(weather_context)
 
     context.update(

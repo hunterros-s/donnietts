@@ -1,13 +1,14 @@
-import time
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+import httpx
 import yaml
 
 from audio import play_audio, prepend_chime
 from config import SCHEDULE_FILE
 from template import render_template
-from tts import create_tts_provider
+from tts import TTSProvider, create_tts_provider
 
 
 @dataclass
@@ -17,8 +18,8 @@ class ScheduledAnnouncement:
 
 
 def load_schedule():
-    with open(SCHEDULE_FILE) as f:
-        config = yaml.safe_load(f)
+    with open(SCHEDULE_FILE) as file:
+        config = yaml.safe_load(file)
 
     lead_minutes = config["defaults"]["lead_minutes"]
     announcements = [
@@ -53,36 +54,58 @@ def next_job(announcements, lead_minutes):
     return min(jobs, key=lambda job: (job[0], job[1]))
 
 
-def sleep_until(target):
+async def sleep_until(target):
     seconds = (target - datetime.now()).total_seconds()
     if seconds > 0:
-        time.sleep(seconds)
+        await asyncio.sleep(seconds)
 
 
-def generate_announcement(tts, announcement, speak_at):
-    text = render_template(announcement.template, speak_at)
+async def generate_announcement(
+    client: httpx.AsyncClient,
+    tts: TTSProvider,
+    announcement: ScheduledAnnouncement,
+    speak_at: datetime,
+):
+    text = await render_template(client, announcement.template, speak_at)
     print(text)
 
-    speech, sr = tts.generate_speech(text)
-    return prepend_chime(speech, sr), sr
+    speech, sample_rate = await tts.generate_speech(text)
+    combined = await asyncio.to_thread(prepend_chime, speech, sample_rate)
+    return combined, sample_rate
 
 
-def main():
+async def run_daemon() -> None:
     lead_minutes, announcements = load_schedule()
-    tts = create_tts_provider()
+    async with httpx.AsyncClient() as client:
+        tts = create_tts_provider(client)
 
-    while True:
-        generate_at, speak_at, announcement = next_job(announcements, lead_minutes)
-        print(f"Next announcement: {announcement.time}; generating at {generate_at}; speaking at {speak_at}")
+        while True:
+            generate_at, speak_at, announcement = next_job(announcements, lead_minutes)
+            print(
+                f"Next announcement: {announcement.time}; "
+                f"generating at {generate_at}; speaking at {speak_at}"
+            )
 
-        sleep_until(generate_at)
-        audio, sr = generate_announcement(tts, announcement, speak_at)
+            await sleep_until(generate_at)
+            audio, sample_rate = await generate_announcement(
+                client,
+                tts,
+                announcement,
+                speak_at,
+            )
 
-        sleep_until(speak_at)
-        try:
-            play_audio(audio, sr)
-        except Exception as exc:
-            raise SystemExit(f"Playback failed: {exc}") from exc
+            await sleep_until(speak_at)
+            try:
+                await asyncio.to_thread(play_audio, audio, sample_rate)
+            except Exception as error:
+                raise RuntimeError(f"Playback failed: {error}") from error
+
+
+def main() -> None:
+    try:
+        asyncio.run(run_daemon())
+    except Exception as error:
+        raise SystemExit(str(error)) from error
 
 
 if __name__ == "__main__":

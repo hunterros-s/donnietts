@@ -1,10 +1,9 @@
-import json
-from urllib.request import Request, urlopen
+import httpx
 
 from config import USER_AGENT
 
 
-def fetch_json(url):
-    request = Request(url, headers={"User-Agent": USER_AGENT})
-    with urlopen(request, timeout=20) as response:
-        return json.load(response)
+async def fetch_json(client: httpx.AsyncClient, url: str) -> dict:
+    response = await client.get(url, headers={"User-Agent": USER_AGENT}, timeout=20)
+    response.raise_for_status()
+    return response.json()

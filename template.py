@@ -1,5 +1,7 @@
 from string import Formatter
 
+import httpx
+
 from context import AVAILABLE_FIELDS, build_template_context
 
 
@@ -15,9 +17,9 @@ def normalize_text(text):
     return " ".join(text.split())
 
 
-def render_template(template, now):
+async def render_template(client: httpx.AsyncClient, template, now):
     fields = template_fields(template)
-    context = build_template_context(fields, now)
+    context = await build_template_context(client, fields, now)
 
     try:
         return normalize_text(template.format(**context))
