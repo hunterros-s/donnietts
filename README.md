@@ -47,7 +47,31 @@ curl -X PATCH http://127.0.0.1:8000/api/v1/settings \
   -d '{"timezone": "America/Detroit"}'
 ```
 
-Daily times are interpreted in this timezone. One-off announcements will be stored as UTC timestamps.
+Daily times are interpreted in this timezone. One-off announcements require an RFC 3339 timestamp with a UTC offset and are stored in UTC.
+
+Create announcements:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/announcements/daily \
+  -H 'Content-Type: application/json' \
+  -d '{"time":"07:30","template":"Good morning. It is {time}.","lead_seconds":300}'
+
+curl -X POST http://127.0.0.1:8000/api/v1/announcements/one-off \
+  -H 'Content-Type: application/json' \
+  -d '{"run_at":"2030-01-01T14:30:00-05:00","template":"Leave for the appointment soon."}'
+```
+
+Edits require the current `revision` and increment it when successful. Stale edits and deletes return `409 Conflict`.
+
+```bash
+curl -X PATCH http://127.0.0.1:8000/api/v1/announcements/15 \
+  -H 'Content-Type: application/json' \
+  -d '{"expected_revision":1,"enabled":false}'
+
+curl -X DELETE 'http://127.0.0.1:8000/api/v1/announcements/15?expected_revision=2'
+```
+
+Supported template fields are `time`, `weekday`, `date`, `location`, `city`, `state`, `latitude`, `longitude`, `weather_condition`, `current_temp`, `high_temp`, `low_temp`, `wind`, `wind_speed`, and `precip_chance`.
 
 The controller stays available and reports `degraded` if the speech service is unavailable. Its readiness endpoint returns `503` until database migrations have been applied.
 

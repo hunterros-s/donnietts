@@ -44,6 +44,7 @@ class Announcement(Base):
             name="ck_announcements_schedule_shape",
         ),
         Index("ix_announcements_kind_enabled", "kind", "enabled"),
+        Index("uq_announcements_daily_minute", "minute_of_day", unique=True),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

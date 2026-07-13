@@ -2,15 +2,32 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import event, select
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import delete, event, select, text, update
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
+from donnietts.migration_runner import schema_head_revision
 from donnietts.models import Announcement, ApplicationSettings
 from donnietts.settings import ControllerSettings
 
 
 logger = logging.getLogger(__name__)
+
+
+class AnnouncementNotFoundError(RuntimeError):
+    pass
+
+
+class AnnouncementRevisionConflictError(RuntimeError):
+    pass
+
+
+class DuplicateDailyTimeError(RuntimeError):
+    pass
+
+
+class AnnouncementKindMismatchError(RuntimeError):
+    pass
 
 
 @dataclass(frozen=True)
@@ -49,6 +66,7 @@ class Database:
     def __init__(self, settings: ControllerSettings):
         self.engine: AsyncEngine = create_async_engine(settings.database_url)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
+        self.schema_head = schema_head_revision()
 
         @event.listens_for(self.engine.sync_engine, "connect")
         def configure_sqlite(dbapi_connection, _connection_record) -> None:
@@ -63,6 +81,16 @@ class Database:
 
     async def check_ready(self) -> tuple[bool, str | None]:
         try:
+            async with self.sessions() as session:
+                current_revision = await session.scalar(
+                    text("SELECT version_num FROM alembic_version")
+                )
+            if current_revision != self.schema_head:
+                return (
+                    False,
+                    f"Database migration required (current: {current_revision}, "
+                    f"expected: {self.schema_head})",
+                )
             await self.get_application_settings()
         except OperationalError as error:
             logger.warning("Database readiness check failed: %s", error)
@@ -76,7 +104,9 @@ class Database:
 
     async def get_application_settings(self) -> ApplicationSettingsSnapshot:
         async with self.sessions() as session:
-            row = await session.scalar(select(ApplicationSettings).where(ApplicationSettings.id == 1))
+            row = await session.scalar(
+                select(ApplicationSettings).where(ApplicationSettings.id == 1)
+            )
             if row is None:
                 raise RuntimeError("Application settings have not been initialized")
             return self._settings_snapshot(row)
@@ -110,6 +140,174 @@ class Database:
                 )
             )
             return [self._announcement_snapshot(row) for row in rows]
+
+    async def get_announcement(self, announcement_id: int) -> AnnouncementSnapshot:
+        async with self.sessions() as session:
+            row = await session.get(Announcement, announcement_id)
+            if row is None:
+                raise AnnouncementNotFoundError(f"Announcement {announcement_id} does not exist")
+            return self._announcement_snapshot(row)
+
+    async def create_daily_announcement(
+        self,
+        *,
+        minute_of_day: int,
+        template: str,
+        enabled: bool,
+        lead_seconds: int,
+    ) -> AnnouncementSnapshot:
+        return await self._create_announcement(
+            kind="daily",
+            minute_of_day=minute_of_day,
+            run_at_utc=None,
+            template=template,
+            enabled=enabled,
+            lead_seconds=lead_seconds,
+        )
+
+    async def create_one_off_announcement(
+        self,
+        *,
+        run_at_utc: datetime,
+        template: str,
+        enabled: bool,
+        lead_seconds: int,
+    ) -> AnnouncementSnapshot:
+        return await self._create_announcement(
+            kind="one_off",
+            minute_of_day=None,
+            run_at_utc=run_at_utc,
+            template=template,
+            enabled=enabled,
+            lead_seconds=lead_seconds,
+        )
+
+    async def update_announcement(
+        self,
+        announcement_id: int,
+        *,
+        expected_revision: int,
+        enabled: bool | None = None,
+        minute_of_day: int | None = None,
+        run_at_utc: datetime | None = None,
+        template: str | None = None,
+        lead_seconds: int | None = None,
+    ) -> AnnouncementSnapshot:
+        try:
+            async with self.sessions.begin() as session:
+                current = await session.get(Announcement, announcement_id)
+                if current is None:
+                    raise AnnouncementNotFoundError(
+                        f"Announcement {announcement_id} does not exist"
+                    )
+                if current.revision != expected_revision:
+                    raise AnnouncementRevisionConflictError(
+                        f"Announcement {announcement_id} has revision {current.revision}, "
+                        f"not {expected_revision}"
+                    )
+                if current.kind == "daily" and run_at_utc is not None:
+                    raise AnnouncementKindMismatchError(
+                        "run_at can only be changed on one-off announcements"
+                    )
+                if current.kind == "one_off" and minute_of_day is not None:
+                    raise AnnouncementKindMismatchError(
+                        "time can only be changed on daily announcements"
+                    )
+
+                values: dict = {
+                    "revision": Announcement.revision + 1,
+                    "updated_at": datetime.now(UTC),
+                }
+                if enabled is not None:
+                    values["enabled"] = enabled
+                if minute_of_day is not None:
+                    values["minute_of_day"] = minute_of_day
+                if run_at_utc is not None:
+                    values["run_at_utc"] = run_at_utc
+                if template is not None:
+                    values["template"] = template
+                if lead_seconds is not None:
+                    values["lead_seconds"] = lead_seconds
+
+                result = await session.execute(
+                    update(Announcement)
+                    .where(
+                        Announcement.id == announcement_id,
+                        Announcement.revision == expected_revision,
+                    )
+                    .values(**values)
+                    .returning(Announcement)
+                )
+                row = result.scalar_one_or_none()
+                if row is None:
+                    raise AnnouncementRevisionConflictError(
+                        f"Announcement {announcement_id} changed during the update"
+                    )
+                return self._announcement_snapshot(row)
+        except IntegrityError as error:
+            if self._is_duplicate_daily_time(error):
+                raise DuplicateDailyTimeError(
+                    "A daily announcement already exists at that time"
+                ) from error
+            raise
+
+    async def delete_announcement(self, announcement_id: int, expected_revision: int) -> None:
+        async with self.sessions.begin() as session:
+            current = await session.get(Announcement, announcement_id)
+            if current is None:
+                raise AnnouncementNotFoundError(f"Announcement {announcement_id} does not exist")
+            if current.revision != expected_revision:
+                raise AnnouncementRevisionConflictError(
+                    f"Announcement {announcement_id} has revision {current.revision}, "
+                    f"not {expected_revision}"
+                )
+            result = await session.execute(
+                delete(Announcement)
+                .where(
+                    Announcement.id == announcement_id,
+                    Announcement.revision == expected_revision,
+                )
+                .returning(Announcement.id)
+            )
+            if result.scalar_one_or_none() is None:
+                raise AnnouncementRevisionConflictError(
+                    f"Announcement {announcement_id} changed during deletion"
+                )
+
+    async def _create_announcement(
+        self,
+        *,
+        kind: str,
+        minute_of_day: int | None,
+        run_at_utc: datetime | None,
+        template: str,
+        enabled: bool,
+        lead_seconds: int,
+    ) -> AnnouncementSnapshot:
+        try:
+            async with self.sessions.begin() as session:
+                row = Announcement(
+                    kind=kind,
+                    minute_of_day=minute_of_day,
+                    run_at_utc=run_at_utc,
+                    template=template,
+                    enabled=enabled,
+                    lead_seconds=lead_seconds,
+                    revision=1,
+                )
+                session.add(row)
+                await session.flush()
+                return self._announcement_snapshot(row)
+        except IntegrityError as error:
+            if self._is_duplicate_daily_time(error):
+                raise DuplicateDailyTimeError(
+                    "A daily announcement already exists at that time"
+                ) from error
+            raise
+
+    @staticmethod
+    def _is_duplicate_daily_time(error: IntegrityError) -> bool:
+        return "announcements.minute_of_day" in str(error.orig)
 
     @staticmethod
     def _settings_snapshot(row: ApplicationSettings) -> ApplicationSettingsSnapshot:

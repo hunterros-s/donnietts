@@ -1,20 +1,18 @@
-from formatting import date_to_words, number_to_words, percent_to_words, time_to_words, wind_to_words
+from donnietts.template_validation import (
+    AVAILABLE_FIELDS,
+    LOCATION_FIELDS,
+    TIME_FIELDS,
+    WEATHER_FIELDS,
+)
+from formatting import (
+    date_to_words,
+    number_to_words,
+    percent_to_words,
+    time_to_words,
+    wind_to_words,
+)
 from location import get_location
 from weather import get_weather
-
-TIME_FIELDS = {"time", "weekday", "date"}
-LOCATION_FIELDS = {"location", "city", "state", "latitude", "longitude"}
-WEATHER_FIELDS = {
-    "weather_condition",
-    "current_temp",
-    "high_temp",
-    "low_temp",
-    "wind",
-    "wind_speed",
-    "precip_chance",
-}
-
-AVAILABLE_FIELDS = TIME_FIELDS | LOCATION_FIELDS | WEATHER_FIELDS
 
 
 def build_location_context():
