@@ -91,3 +91,12 @@ The SQLite database defaults to `~/.local/state/donnietts/donnietts.sqlite3`. Ov
 - `TTS_STATUS_TIMEOUT_SECONDS`: provider status timeout; defaults to `2`
 
 The controller can target another OpenAI-compatible speech provider by changing these variables. It does not load or depend on Qwen directly.
+
+## Tests
+
+```bash
+uv sync --dev
+uv run pytest
+```
+
+The controller tests use isolated temporary SQLite databases and do not modify the configured application database.

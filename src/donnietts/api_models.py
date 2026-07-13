@@ -63,6 +63,13 @@ class DailyAnnouncementCreate(AnnouncementCreateBase):
 class OneOffAnnouncementCreate(AnnouncementCreateBase):
     run_at: datetime
 
+    @field_validator("run_at", mode="before")
+    @classmethod
+    def require_rfc3339_string(cls, value: object) -> object:
+        if not isinstance(value, str):
+            raise ValueError("run_at must be an RFC 3339 timestamp")
+        return value
+
     @field_validator("run_at")
     @classmethod
     def validate_run_at(cls, value: datetime) -> datetime:
@@ -85,6 +92,13 @@ class AnnouncementPatch(BaseModel):
         if value is None:
             raise ValueError("time may not be null")
         parse_daily_time(value)
+        return value
+
+    @field_validator("run_at", mode="before")
+    @classmethod
+    def require_rfc3339_string(cls, value: object) -> object:
+        if not isinstance(value, str):
+            raise ValueError("run_at must be an RFC 3339 timestamp")
         return value
 
     @field_validator("run_at")
