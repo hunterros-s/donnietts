@@ -4,10 +4,8 @@ from pathlib import Path
 ASSETS_DIR = Path("assets")
 CHIME_AUDIO = ASSETS_DIR / "startup3.mp3"
 SOUND_OFF_AUDIO = ASSETS_DIR / "sound_off.mp3"
-REFERENCE_AUDIO = ASSETS_DIR / "voice_sample.wav"
 SCHEDULE_FILE = Path("schedule.yaml")
 
-TTS_PROVIDER = os.getenv("TTS_PROVIDER", "embedded")
 TTS_BASE_URL = os.getenv("TTS_BASE_URL", "http://127.0.0.1:8101/v1")
 TTS_API_KEY = os.getenv("TTS_API_KEY", "local")
 TTS_MODEL = os.getenv("TTS_MODEL", "qwen3-tts-0.6b")

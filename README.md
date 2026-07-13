@@ -1,16 +1,10 @@
 # DonnieTTS
 
-Scheduled spoken announcements with local or OpenAI-compatible speech generation.
+Scheduled spoken announcements using an OpenAI-compatible speech endpoint.
 
-## Speech providers
+## Local Qwen speech service
 
-The existing embedded Qwen provider remains the default:
-
-```bash
-uv run python speak.py "Hello."
-```
-
-To use the standalone Qwen speech service, start it first:
+Start the standalone service:
 
 ```bash
 cd services/qwen-speech
@@ -18,15 +12,16 @@ uv sync --dev
 uv run qwen-speech serve
 ```
 
-Then run the controller with the HTTP provider:
+Then, from the repository root:
 
 ```bash
-TTS_PROVIDER=openai uv run python speak.py "Hello."
+uv run python speak.py "Hello."
 ```
 
-Controller speech configuration:
+The controller defaults to `http://127.0.0.1:8101/v1` using the `qwen3-tts-0.6b` model and `announcer` voice.
 
-- `TTS_PROVIDER`: `embedded` or `openai`
+## Speech endpoint configuration
+
 - `TTS_BASE_URL`: defaults to `http://127.0.0.1:8101/v1`
 - `TTS_API_KEY`: defaults to `local`
 - `TTS_MODEL`: defaults to `qwen3-tts-0.6b`
@@ -34,4 +29,4 @@ Controller speech configuration:
 - `TTS_INSTRUCTIONS`: optional provider-specific speaking instructions
 - `TTS_TIMEOUT_SECONDS`: defaults to `300`
 
-The same HTTP provider can target another OpenAI-compatible speech endpoint by changing these variables.
+The controller can target another OpenAI-compatible speech provider by changing these variables. It does not load or depend on Qwen directly.
