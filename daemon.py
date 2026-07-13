@@ -7,7 +7,7 @@ import yaml
 from audio import play_audio, prepend_chime
 from config import SCHEDULE_FILE
 from template import render_template
-from tts import QwenTTSProvider
+from tts import create_tts_provider
 
 
 @dataclass
@@ -69,7 +69,7 @@ def generate_announcement(tts, announcement, speak_at):
 
 def main():
     lead_minutes, announcements = load_schedule()
-    tts = QwenTTSProvider()
+    tts = create_tts_provider()
 
     while True:
         generate_at, speak_at, announcement = next_job(announcements, lead_minutes)

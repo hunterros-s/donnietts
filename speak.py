@@ -4,7 +4,7 @@ from datetime import datetime
 from audio import play_audio, prepend_chime
 from config import DEFAULT_TEMPLATE
 from template import render_template
-from tts import QwenTTSProvider
+from tts import create_tts_provider
 
 
 def main():
@@ -12,7 +12,7 @@ def main():
     announcement = render_template(template, datetime.now())
     print(announcement)
 
-    tts = QwenTTSProvider()
+    tts = create_tts_provider()
     speech, sr = tts.generate_speech(announcement)
     combined = prepend_chime(speech, sr)
 
