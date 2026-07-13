@@ -22,11 +22,27 @@ class SpeechBackendError(Exception):
         self.code = code
 
 
+class SpeechBackendNotReady(SpeechBackendError):
+    pass
+
+
+class SpeechBackendBusy(SpeechBackendError):
+    pass
+
+
+class SpeechBackendFailure(SpeechBackendError):
+    pass
+
+
 class SpeechBackend(Protocol):
     @property
     def ready(self) -> bool: ...
 
     def models(self) -> list[ModelObject]: ...
+
+    async def start(self) -> None: ...
+
+    async def stop(self) -> None: ...
 
     async def synthesize(self, request: CreateSpeechRequest) -> SynthesizedAudio: ...
 
@@ -43,6 +59,12 @@ class FakeSpeechBackend:
 
     def models(self) -> list[ModelObject]:
         return [ModelObject(id=self.model_id)]
+
+    async def start(self) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
 
     async def synthesize(self, request: CreateSpeechRequest) -> SynthesizedAudio:
         if request.model != self.model_id:

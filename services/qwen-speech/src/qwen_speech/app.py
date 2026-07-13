@@ -1,11 +1,21 @@
 import hmac
 import os
 import uuid
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 
-from qwen_speech.backend import FakeSpeechBackend, SpeechBackend, SpeechBackendError
+from qwen_speech.backend import (
+    FakeSpeechBackend,
+    SpeechBackend,
+    SpeechBackendBusy,
+    SpeechBackendError,
+    SpeechBackendFailure,
+    SpeechBackendNotReady,
+)
+from qwen_speech.qwen_backend import QwenSpeechBackend
 from qwen_speech.schemas import CreateSpeechRequest, ModelList
 
 
@@ -41,11 +51,28 @@ def error_response(error: ApiError) -> JSONResponse:
     )
 
 
+def runtime_backend() -> SpeechBackend:
+    backend_name = os.getenv("QWEN_SPEECH_BACKEND", "qwen").lower()
+    if backend_name == "qwen":
+        return QwenSpeechBackend.from_environment()
+    if backend_name == "fake":
+        return FakeSpeechBackend()
+    raise RuntimeError(f"Unknown QWEN_SPEECH_BACKEND: {backend_name}")
+
+
 def create_app(*, backend: SpeechBackend | None = None, api_key: str | None = None) -> FastAPI:
-    speech_backend = backend or FakeSpeechBackend()
+    speech_backend = backend or runtime_backend()
     configured_api_key = api_key if api_key is not None else os.getenv("QWEN_SPEECH_API_KEY")
 
-    app = FastAPI(title="Qwen Speech Service", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        await speech_backend.start()
+        try:
+            yield
+        finally:
+            await speech_backend.stop()
+
+    app = FastAPI(title="Qwen Speech Service", version="0.1.0", lifespan=lifespan)
     app.state.speech_backend = speech_backend
 
     async def authorize(authorization: str | None = Header(default=None)) -> None:
@@ -100,10 +127,19 @@ def create_app(*, backend: SpeechBackend | None = None, api_key: str | None = No
         try:
             audio = await speech_backend.synthesize(payload)
         except SpeechBackendError as error:
+            if isinstance(error, SpeechBackendBusy):
+                status_code, error_type = 429, "rate_limit_error"
+            elif isinstance(error, SpeechBackendNotReady):
+                status_code, error_type = 503, "server_error"
+            elif isinstance(error, SpeechBackendFailure):
+                status_code, error_type = 500, "server_error"
+            else:
+                status_code, error_type = 400, "invalid_request_error"
+
             raise ApiError(
-                400,
+                status_code,
                 error.message,
-                error_type="invalid_request_error",
+                error_type=error_type,
                 param=error.param,
                 code=error.code,
             ) from error

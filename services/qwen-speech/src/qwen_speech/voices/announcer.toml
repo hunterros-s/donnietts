@@ -1,0 +1,6 @@
+id = "announcer"
+language = "English"
+reference_audio = "announcer.wav"
+reference_text = """
+Greetings, human. I am an advanced artificial intelligence, designed to assist, inform, and interact with you in a variety of environments. My voice may sound robotic, but my purpose is to make your life easier, more efficient, and just a bit more futuristic.
+"""
