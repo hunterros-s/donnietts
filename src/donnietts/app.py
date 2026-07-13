@@ -7,7 +7,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from donnietts import __version__
-from donnietts.api_models import ApplicationSettingsPatch, ApplicationSettingsResponse
+from donnietts.api_models import (
+    AnnouncementResponse,
+    ApplicationSettingsPatch,
+    ApplicationSettingsResponse,
+)
 from donnietts.database import ApplicationSettingsSnapshot, Database
 from donnietts.settings import ControllerSettings
 from donnietts.speech_status import get_speech_status
@@ -84,6 +88,15 @@ def create_app(settings: ControllerSettings | None = None) -> FastAPI:
             "database": database_status,
             "speech": speech_result,
         }
+
+    @app.get("/api/v1/announcements", response_model=list[AnnouncementResponse])
+    async def list_announcements() -> list[AnnouncementResponse]:
+        try:
+            announcements = await database.list_announcements()
+        except Exception as error:
+            logger.warning("Could not list announcements: %s", error)
+            raise HTTPException(status_code=503, detail="Controller database is not ready") from error
+        return [AnnouncementResponse.from_snapshot(item) for item in announcements]
 
     @app.get("/api/v1/settings", response_model=ApplicationSettingsResponse)
     async def get_settings() -> ApplicationSettingsResponse:

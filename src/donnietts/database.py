@@ -6,7 +6,7 @@ from sqlalchemy import event, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
-from donnietts.models import ApplicationSettings
+from donnietts.models import Announcement, ApplicationSettings
 from donnietts.settings import ControllerSettings
 
 
@@ -21,6 +21,27 @@ class ApplicationSettingsSnapshot:
     @property
     def mode(self) -> str:
         return "active" if self.announcements_enabled else "paused"
+
+
+@dataclass(frozen=True)
+class AnnouncementSnapshot:
+    id: int
+    kind: str
+    enabled: bool
+    minute_of_day: int | None
+    run_at_utc: datetime | None
+    template: str
+    lead_seconds: int
+    revision: int
+    created_at: datetime
+    updated_at: datetime
+
+    @property
+    def time(self) -> str | None:
+        if self.minute_of_day is None:
+            return None
+        hour, minute = divmod(self.minute_of_day, 60)
+        return f"{hour:02d}:{minute:02d}"
 
 
 class Database:
@@ -57,7 +78,7 @@ class Database:
             row = await session.scalar(select(ApplicationSettings).where(ApplicationSettings.id == 1))
             if row is None:
                 raise RuntimeError("Application settings have not been initialized")
-            return self._snapshot(row)
+            return self._settings_snapshot(row)
 
     async def set_announcements_enabled(self, enabled: bool) -> ApplicationSettingsSnapshot:
         async with self.sessions.begin() as session:
@@ -67,10 +88,22 @@ class Database:
             row.announcements_enabled = enabled
             row.updated_at = datetime.now(UTC)
             await session.flush()
-            return self._snapshot(row)
+            return self._settings_snapshot(row)
+
+    async def list_announcements(self) -> list[AnnouncementSnapshot]:
+        async with self.sessions() as session:
+            rows = await session.scalars(
+                select(Announcement).order_by(
+                    Announcement.kind,
+                    Announcement.minute_of_day,
+                    Announcement.run_at_utc,
+                    Announcement.id,
+                )
+            )
+            return [self._announcement_snapshot(row) for row in rows]
 
     @staticmethod
-    def _snapshot(row: ApplicationSettings) -> ApplicationSettingsSnapshot:
+    def _settings_snapshot(row: ApplicationSettings) -> ApplicationSettingsSnapshot:
         updated_at = row.updated_at
         if updated_at.tzinfo is None:
             updated_at = updated_at.replace(tzinfo=UTC)
@@ -78,3 +111,24 @@ class Database:
             announcements_enabled=row.announcements_enabled,
             updated_at=updated_at,
         )
+
+    @classmethod
+    def _announcement_snapshot(cls, row: Announcement) -> AnnouncementSnapshot:
+        return AnnouncementSnapshot(
+            id=row.id,
+            kind=row.kind,
+            enabled=row.enabled,
+            minute_of_day=row.minute_of_day,
+            run_at_utc=cls._as_utc(row.run_at_utc) if row.run_at_utc else None,
+            template=row.template,
+            lead_seconds=row.lead_seconds,
+            revision=row.revision,
+            created_at=cls._as_utc(row.created_at),
+            updated_at=cls._as_utc(row.updated_at),
+        )
+
+    @staticmethod
+    def _as_utc(value: datetime) -> datetime:
+        if value.tzinfo is not None:
+            return value
+        return value.replace(tzinfo=UTC)

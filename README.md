@@ -25,11 +25,14 @@ uv run donnietts db upgrade
 uv run donnietts serve
 ```
 
+The database migration seeds the existing daily schedule the first time it is applied.
+
 Inspect its status and persisted settings:
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/status
 curl http://127.0.0.1:8000/api/v1/settings
+curl http://127.0.0.1:8000/api/v1/announcements
 ```
 
 Pause announcements:
