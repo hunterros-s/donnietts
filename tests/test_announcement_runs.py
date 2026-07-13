@@ -1,7 +1,9 @@
 import asyncio
+import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from alembic import command
 
 from donnietts.announcement_runs import (
     AnnouncementRunNotFoundError,
@@ -13,6 +15,7 @@ from donnietts.announcement_runs import (
     RunStateConflictError,
 )
 from donnietts.database import Database
+from donnietts.migration_runner import migration_config
 from donnietts.settings import ControllerSettings
 
 
@@ -27,6 +30,41 @@ async def create_source(database: Database, minute_of_day: int = 7 * 60 + 30):
         enabled=True,
         lead_seconds=300,
     )
+
+
+def test_durable_checkpoint_migration_resets_in_progress_generation(
+    controller_settings: ControllerSettings,
+) -> None:
+    config = migration_config()
+    config.set_main_option("sqlalchemy.url", controller_settings.database_url)
+    command.upgrade(config, "0005")
+    with sqlite3.connect(controller_settings.database_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO announcement_runs (
+                announcement_id,
+                announcement_revision,
+                announcement_kind,
+                scheduled_for_utc,
+                generation_due_at_utc,
+                status,
+                template_snapshot,
+                attempt_count
+            ) VALUES (1, 1, 'daily', ?, ?, 'generating', 'Test', 1)
+            """,
+            (SCHEDULED.isoformat(), GENERATION_DUE.isoformat()),
+        )
+
+    command.upgrade(config, "head")
+
+    with sqlite3.connect(controller_settings.database_path) as connection:
+        status = connection.execute("SELECT status FROM announcement_runs").fetchone()[0]
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(announcement_runs)")
+        }
+    assert status == "planned"
+    assert "attempt_count" not in columns
+    assert "generation_started_at" not in columns
 
 
 async def create_run(
@@ -65,7 +103,6 @@ def test_planned_run_snapshots_its_source_and_rejects_duplicates(
             assert run.generation_due_at_utc == GENERATION_DUE
             assert run.status == "planned"
             assert run.template_snapshot == "It is {time}."
-            assert run.attempt_count == 0
             assert run.rendered_text is None
             assert run.audio_path is None
             assert run.finished_at is None
@@ -150,24 +187,13 @@ def test_run_happy_path_records_state_timestamps(migrated_settings: ControllerSe
         database = Database(migrated_settings)
         try:
             planned = await create_run(database)
-            generation_started = GENERATION_DUE
-            ready_at = generation_started + timedelta(seconds=2)
+            ready_at = GENERATION_DUE + timedelta(seconds=2)
             playback_started = SCHEDULED
             completed_at = playback_started + timedelta(seconds=4)
 
-            generating = await database.runs.transition(
-                planned.id,
-                expected_status="planned",
-                new_status="generating",
-                now=generation_started,
-            )
-            assert generating.status == "generating"
-            assert generating.attempt_count == 1
-            assert generating.generation_started_at == generation_started
-
             ready = await database.runs.transition(
                 planned.id,
-                expected_status="generating",
+                expected_status="planned",
                 new_status="ready",
                 rendered_text="It is three PM.",
                 audio_path=" /tmp/run.wav ",
@@ -221,7 +247,7 @@ def test_invalid_and_conflicting_transitions_are_rejected(
                 await database.runs.transition(
                     planned.id,
                     expected_status="planned",
-                    new_status="ready",
+                    new_status="playing",
                     rendered_text="Rendered",
                     audio_path="/tmp/run.wav",
                 )
@@ -245,19 +271,25 @@ def test_invalid_and_conflicting_transitions_are_rejected(
                 await database.runs.transition(
                     planned.id,
                     expected_status="planned",
-                    new_status="generating",
+                    new_status="ready",
+                    rendered_text="Rendered",
+                    audio_path="/tmp/run.wav",
                 )
             with pytest.raises(InvalidRunTransitionError):
                 await database.runs.transition(
                     planned.id,
                     expected_status="skipped",
-                    new_status="generating",
+                    new_status="ready",
+                    rendered_text="Rendered",
+                    audio_path="/tmp/run.wav",
                 )
             with pytest.raises(AnnouncementRunNotFoundError):
                 await database.runs.transition(
                     999_999,
                     expected_status="planned",
-                    new_status="generating",
+                    new_status="ready",
+                    rendered_text="Rendered",
+                    audio_path="/tmp/run.wav",
                 )
             assert (await database.runs.get(planned.id)).status == "skipped"
         finally:
@@ -273,28 +305,23 @@ def test_ready_and_failed_transitions_require_outputs(
         database = Database(migrated_settings)
         try:
             run = await create_run(database)
-            await database.runs.transition(
-                run.id,
-                expected_status="planned",
-                new_status="generating",
-            )
             with pytest.raises(InvalidRunDataError, match="audio_path"):
                 await database.runs.transition(
                     run.id,
-                    expected_status="generating",
+                    expected_status="planned",
                     new_status="ready",
                     rendered_text="Rendered text",
                 )
             with pytest.raises(InvalidRunDataError, match="error"):
                 await database.runs.transition(
                     run.id,
-                    expected_status="generating",
+                    expected_status="planned",
                     new_status="failed",
                 )
 
             failed = await database.runs.transition(
                 run.id,
-                expected_status="generating",
+                expected_status="planned",
                 new_status="failed",
                 error=" speech provider unavailable ",
             )
@@ -326,11 +353,6 @@ def test_cancellation_and_interruption_record_reasons(
             await database.runs.transition(
                 interrupted_run.id,
                 expected_status="planned",
-                new_status="generating",
-            )
-            await database.runs.transition(
-                interrupted_run.id,
-                expected_status="generating",
                 new_status="ready",
                 rendered_text="Rendered",
                 audio_path="/tmp/interrupted.wav",
@@ -354,10 +376,10 @@ def test_cancellation_and_interruption_record_reasons(
     asyncio.run(exercise())
 
 
-def test_concurrent_run_claims_allow_only_one_worker(
+def test_concurrent_ready_commits_allow_only_one_winner(
     migrated_settings: ControllerSettings,
 ) -> None:
-    async def exercise() -> tuple[list[AnnouncementRunSnapshot], list[Exception], int]:
+    async def exercise() -> tuple[list[AnnouncementRunSnapshot], list[Exception], str]:
         database = Database(migrated_settings)
         try:
             run = await create_run(database)
@@ -365,47 +387,51 @@ def test_concurrent_run_claims_allow_only_one_worker(
                 database.runs.transition(
                     run.id,
                     expected_status="planned",
-                    new_status="generating",
+                    new_status="ready",
+                    rendered_text="First worker",
+                    audio_path="/tmp/first.wav",
                 ),
                 database.runs.transition(
                     run.id,
                     expected_status="planned",
-                    new_status="generating",
+                    new_status="ready",
+                    rendered_text="Second worker",
+                    audio_path="/tmp/second.wav",
                 ),
                 return_exceptions=True,
             )
             successes = [item for item in results if isinstance(item, AnnouncementRunSnapshot)]
             errors = [item for item in results if isinstance(item, Exception)]
             current = await database.runs.get(run.id)
-            return successes, errors, current.attempt_count
+            return successes, errors, current.status
         finally:
             await database.close()
 
-    successes, errors, attempt_count = asyncio.run(exercise())
+    successes, errors, status = asyncio.run(exercise())
 
     assert len(successes) == 1
     assert len(errors) == 1
     assert isinstance(errors[0], RunStateConflictError)
-    assert attempt_count == 1
+    assert status == "ready"
 
 
-def test_stale_in_progress_query_supports_restart_recovery(
+def test_stale_playing_query_supports_restart_recovery(
     migrated_settings: ControllerSettings,
 ) -> None:
     async def exercise() -> tuple[set[int], set[int], set[int]]:
         database = Database(migrated_settings)
         try:
-            old_generating = await create_run(
+            old_playing = await create_run(
                 database,
                 minute_of_day=7 * 60,
                 scheduled_for_utc=SCHEDULED,
             )
-            old_playing = await create_run(
+            recent_playing = await create_run(
                 database,
                 minute_of_day=7 * 60 + 1,
                 scheduled_for_utc=SCHEDULED + timedelta(minutes=1),
             )
-            recent_generating = await create_run(
+            ready = await create_run(
                 database,
                 minute_of_day=7 * 60 + 2,
                 scheduled_for_utc=SCHEDULED + timedelta(minutes=2),
@@ -418,46 +444,37 @@ def test_stale_in_progress_query_supports_restart_recovery(
             old_time = datetime(2099, 12, 31, 12, 0, tzinfo=UTC)
             recent_time = old_time + timedelta(hours=2)
 
-            await database.runs.transition(
-                old_generating.id,
-                expected_status="planned",
-                new_status="generating",
-                now=old_time,
-            )
-            await database.runs.transition(
-                old_playing.id,
-                expected_status="planned",
-                new_status="generating",
-                now=old_time,
-            )
-            await database.runs.transition(
-                old_playing.id,
-                expected_status="generating",
-                new_status="ready",
-                rendered_text="Ready",
-                audio_path="/tmp/ready.wav",
-                now=old_time,
-            )
-            await database.runs.transition(
-                old_playing.id,
-                expected_status="ready",
-                new_status="playing",
-                now=old_time,
-            )
-            await database.runs.transition(
-                recent_generating.id,
-                expected_status="planned",
-                new_status="generating",
-                now=recent_time,
-            )
+            for run, transition_time in (
+                (old_playing, old_time),
+                (recent_playing, recent_time),
+                (ready, old_time),
+            ):
+                await database.runs.transition(
+                    run.id,
+                    expected_status="planned",
+                    new_status="ready",
+                    rendered_text="Ready",
+                    audio_path=f"/tmp/{run.id}.wav",
+                    now=transition_time,
+                )
+            for run, transition_time in (
+                (old_playing, old_time),
+                (recent_playing, recent_time),
+            ):
+                await database.runs.transition(
+                    run.id,
+                    expected_status="ready",
+                    new_status="playing",
+                    now=transition_time,
+                )
 
             stale = await database.runs.list_stale_in_progress(
                 old_time + timedelta(hours=1)
             )
             return (
                 {run.id for run in stale},
-                {old_generating.id, old_playing.id},
-                {recent_generating.id, planned.id},
+                {old_playing.id},
+                {recent_playing.id, ready.id, planned.id},
             )
         finally:
             await database.close()

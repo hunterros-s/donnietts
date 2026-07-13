@@ -91,15 +91,14 @@ class AnnouncementRun(Base):
             name="ck_announcement_runs_kind",
         ),
         CheckConstraint(
-            "status IN ('planned', 'generating', 'ready', 'playing', 'completed', "
-            "'failed', 'skipped', 'cancelled', 'interrupted')",
+            "status IN ('planned', 'ready', 'playing', 'completed', 'failed', "
+            "'skipped', 'cancelled', 'interrupted')",
             name="ck_announcement_runs_status",
         ),
         CheckConstraint(
             "announcement_revision >= 1",
             name="ck_announcement_runs_revision",
         ),
-        CheckConstraint("attempt_count >= 0", name="ck_announcement_runs_attempt_count"),
         CheckConstraint(
             "generation_due_at_utc <= scheduled_for_utc",
             name="ck_announcement_runs_generation_before_schedule",
@@ -143,12 +142,6 @@ class AnnouncementRun(Base):
     template_snapshot: Mapped[str] = mapped_column(Text, nullable=False)
     rendered_text: Mapped[str | None] = mapped_column(Text)
     audio_path: Mapped[str | None] = mapped_column(Text)
-    attempt_count: Mapped[int] = mapped_column(
-        Integer,
-        nullable=False,
-        default=0,
-        server_default="0",
-    )
     error: Mapped[str | None] = mapped_column(Text)
     outcome_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
@@ -161,7 +154,6 @@ class AnnouncementRun(Base):
         nullable=False,
         server_default=func.current_timestamp(),
     )
-    generation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ready_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     playback_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

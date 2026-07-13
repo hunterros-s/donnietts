@@ -11,7 +11,6 @@ from donnietts.models import Announcement, AnnouncementRun
 
 RunStatus = Literal[
     "planned",
-    "generating",
     "ready",
     "playing",
     "completed",
@@ -22,8 +21,7 @@ RunStatus = Literal[
 ]
 
 ALLOWED_TRANSITIONS: dict[RunStatus, frozenset[RunStatus]] = {
-    "planned": frozenset({"generating", "skipped", "cancelled"}),
-    "generating": frozenset({"ready", "failed", "cancelled"}),
+    "planned": frozenset({"ready", "failed", "skipped", "cancelled"}),
     "ready": frozenset({"playing", "failed", "skipped", "cancelled"}),
     "playing": frozenset({"completed", "failed", "interrupted"}),
     "completed": frozenset(),
@@ -32,8 +30,8 @@ ALLOWED_TRANSITIONS: dict[RunStatus, frozenset[RunStatus]] = {
     "cancelled": frozenset(),
     "interrupted": frozenset(),
 }
-IN_PROGRESS_STATUSES = frozenset({"generating", "playing"})
-CANCELLABLE_STATUSES = frozenset({"planned", "generating", "ready"})
+IN_PROGRESS_STATUSES = frozenset({"playing"})
+CANCELLABLE_STATUSES = frozenset({"planned", "ready"})
 TERMINAL_STATUSES = frozenset({"completed", "failed", "skipped", "cancelled", "interrupted"})
 REASON_STATUSES = frozenset({"skipped", "cancelled", "interrupted"})
 
@@ -74,12 +72,10 @@ class AnnouncementRunSnapshot:
     template_snapshot: str
     rendered_text: str | None
     audio_path: str | None
-    attempt_count: int
     error: str | None
     outcome_reason: str | None
     created_at: datetime
     updated_at: datetime
-    generation_started_at: datetime | None
     ready_at: datetime | None
     playback_started_at: datetime | None
     finished_at: datetime | None
@@ -121,7 +117,6 @@ class AnnouncementRunRepository:
                     generation_due_at_utc=generation_due_at_utc,
                     status="planned",
                     template_snapshot=announcement.template,
-                    attempt_count=0,
                 )
                 session.add(row)
                 await session.flush()
@@ -233,10 +228,7 @@ class AnnouncementRunRepository:
             )
 
         values: dict[str, object] = {"status": new_status, "updated_at": now}
-        if new_status == "generating":
-            values["generation_started_at"] = now
-            values["attempt_count"] = AnnouncementRun.attempt_count + 1
-        elif new_status == "ready":
+        if new_status == "ready":
             rendered_text = AnnouncementRunRepository._required_text(
                 rendered_text,
                 "rendered_text",
@@ -308,12 +300,10 @@ class AnnouncementRunRepository:
             template_snapshot=row.template_snapshot,
             rendered_text=row.rendered_text,
             audio_path=row.audio_path,
-            attempt_count=row.attempt_count,
             error=row.error,
             outcome_reason=row.outcome_reason,
             created_at=cls._as_utc(row.created_at),
             updated_at=cls._as_utc(row.updated_at),
-            generation_started_at=cls._optional_utc(row.generation_started_at),
             ready_at=cls._optional_utc(row.ready_at),
             playback_started_at=cls._optional_utc(row.playback_started_at),
             finished_at=cls._optional_utc(row.finished_at),
