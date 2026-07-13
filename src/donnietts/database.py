@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class ApplicationSettingsSnapshot:
     announcements_enabled: bool
+    timezone: str
     updated_at: datetime
 
     @property
@@ -80,12 +81,20 @@ class Database:
                 raise RuntimeError("Application settings have not been initialized")
             return self._settings_snapshot(row)
 
-    async def set_announcements_enabled(self, enabled: bool) -> ApplicationSettingsSnapshot:
+    async def update_application_settings(
+        self,
+        *,
+        announcements_enabled: bool | None = None,
+        timezone: str | None = None,
+    ) -> ApplicationSettingsSnapshot:
         async with self.sessions.begin() as session:
             row = await session.get(ApplicationSettings, 1)
             if row is None:
                 raise RuntimeError("Application settings have not been initialized")
-            row.announcements_enabled = enabled
+            if announcements_enabled is not None:
+                row.announcements_enabled = announcements_enabled
+            if timezone is not None:
+                row.timezone = timezone
             row.updated_at = datetime.now(UTC)
             await session.flush()
             return self._settings_snapshot(row)
@@ -109,6 +118,7 @@ class Database:
             updated_at = updated_at.replace(tzinfo=UTC)
         return ApplicationSettingsSnapshot(
             announcements_enabled=row.announcements_enabled,
+            timezone=row.timezone,
             updated_at=updated_at,
         )
 

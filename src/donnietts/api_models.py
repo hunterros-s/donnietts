@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from donnietts.database import AnnouncementSnapshot, ApplicationSettingsSnapshot
 
@@ -37,12 +38,31 @@ class AnnouncementResponse(BaseModel):
 class ApplicationSettingsPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    announcements_enabled: bool
+    announcements_enabled: bool | None = None
+    timezone: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as error:
+            raise ValueError("timezone must be a valid IANA timezone") from error
+        return value
+
+    @model_validator(mode="after")
+    def require_update(self) -> "ApplicationSettingsPatch":
+        if self.announcements_enabled is None and self.timezone is None:
+            raise ValueError("at least one setting must be provided")
+        return self
 
 
 class ApplicationSettingsResponse(BaseModel):
     announcements_enabled: bool
     mode: Literal["active", "paused"]
+    timezone: str
     updated_at: datetime
 
     @classmethod
@@ -50,5 +70,6 @@ class ApplicationSettingsResponse(BaseModel):
         return cls(
             announcements_enabled=snapshot.announcements_enabled,
             mode=snapshot.mode,
+            timezone=snapshot.timezone,
             updated_at=snapshot.updated_at,
         )

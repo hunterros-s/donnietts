@@ -35,13 +35,19 @@ curl http://127.0.0.1:8000/api/v1/settings
 curl http://127.0.0.1:8000/api/v1/announcements
 ```
 
-Pause announcements:
+Pause announcements or update the IANA timezone:
 
 ```bash
 curl -X PATCH http://127.0.0.1:8000/api/v1/settings \
   -H 'Content-Type: application/json' \
   -d '{"announcements_enabled": false}'
+
+curl -X PATCH http://127.0.0.1:8000/api/v1/settings \
+  -H 'Content-Type: application/json' \
+  -d '{"timezone": "America/Detroit"}'
 ```
+
+Daily times are interpreted in this timezone. One-off announcements will be stored as UTC timestamps.
 
 The controller stays available and reports `degraded` if the speech service is unavailable. Its readiness endpoint returns `503` until database migrations have been applied.
 

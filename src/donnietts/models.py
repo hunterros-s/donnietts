@@ -19,6 +19,12 @@ class ApplicationSettings(Base):
         default=True,
         server_default=true(),
     )
+    timezone: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="America/Detroit",
+        server_default="America/Detroit",
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

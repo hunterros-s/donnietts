@@ -69,10 +69,12 @@ def create_app(settings: ControllerSettings | None = None) -> FastAPI:
             application_settings = await database.get_application_settings()
             announcements_enabled: bool | None = application_settings.announcements_enabled
             mode = application_settings.mode
+            timezone: str | None = application_settings.timezone
             database_status = {"status": "ready"}
         else:
             announcements_enabled = None
             mode = "unavailable"
+            timezone = None
             database_status = {"status": "unavailable", "error": database_error}
 
         controller_status = (
@@ -85,6 +87,7 @@ def create_app(settings: ControllerSettings | None = None) -> FastAPI:
             "version": __version__,
             "announcements_enabled": announcements_enabled,
             "mode": mode,
+            "timezone": timezone,
             "database": database_status,
             "speech": speech_result,
         }
@@ -106,7 +109,10 @@ def create_app(settings: ControllerSettings | None = None) -> FastAPI:
     @app.patch("/api/v1/settings", response_model=ApplicationSettingsResponse)
     async def update_settings(payload: ApplicationSettingsPatch) -> ApplicationSettingsResponse:
         try:
-            snapshot = await database.set_announcements_enabled(payload.announcements_enabled)
+            snapshot = await database.update_application_settings(
+                announcements_enabled=payload.announcements_enabled,
+                timezone=payload.timezone,
+            )
         except Exception as error:
             logger.warning("Could not update controller settings: %s", error)
             raise HTTPException(status_code=503, detail="Controller database is not ready") from error
