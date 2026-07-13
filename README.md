@@ -18,21 +18,33 @@ Then, from the repository root, test speech playback:
 uv run python speak.py "Hello."
 ```
 
-Start the controller API in another terminal:
+Initialize the controller database and start its API in another terminal:
 
 ```bash
+uv run donnietts db upgrade
 uv run donnietts serve
 ```
 
-Inspect its status:
+Inspect its status and persisted settings:
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/status
+curl http://127.0.0.1:8000/api/v1/settings
 ```
 
-The controller stays available and reports `degraded` if the speech service is unavailable.
+Pause announcements:
+
+```bash
+curl -X PATCH http://127.0.0.1:8000/api/v1/settings \
+  -H 'Content-Type: application/json' \
+  -d '{"announcements_enabled": false}'
+```
+
+The controller stays available and reports `degraded` if the speech service is unavailable. Its readiness endpoint returns `503` until database migrations have been applied.
 
 The controller defaults to `http://127.0.0.1:8101/v1` using the `qwen3-tts-0.6b` model and `announcer` voice.
+
+The SQLite database defaults to `~/.local/state/donnietts/donnietts.sqlite3`. Override it with `DONNIETTS_DB_PATH`.
 
 ## Speech endpoint configuration
 

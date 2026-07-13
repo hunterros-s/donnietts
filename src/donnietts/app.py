@@ -1,44 +1,103 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from donnietts import __version__
-from donnietts.settings import SpeechSettings
+from donnietts.api_models import ApplicationSettingsPatch, ApplicationSettingsResponse
+from donnietts.database import ApplicationSettingsSnapshot, Database
+from donnietts.settings import ControllerSettings
 from donnietts.speech_status import get_speech_status
 
 
-def create_app(settings: SpeechSettings | None = None) -> FastAPI:
-    speech_settings = settings or SpeechSettings.from_environment()
+logger = logging.getLogger(__name__)
+
+
+def create_app(settings: ControllerSettings | None = None) -> FastAPI:
+    controller_settings = settings or ControllerSettings.from_environment()
+    database = Database(controller_settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        app.state.http_client = httpx.AsyncClient(timeout=speech_settings.status_timeout_seconds)
+        app.state.http_client = httpx.AsyncClient(
+            timeout=controller_settings.speech.status_timeout_seconds
+        )
+        app.state.database = database
         try:
             yield
         finally:
             await app.state.http_client.aclose()
+            await database.close()
 
     app = FastAPI(title="DonnieTTS Controller", version=__version__, lifespan=lifespan)
-    app.state.speech_settings = speech_settings
+    app.state.controller_settings = controller_settings
+
+    async def read_application_settings() -> ApplicationSettingsSnapshot:
+        try:
+            return await database.get_application_settings()
+        except Exception as error:
+            logger.warning("Controller database is unavailable: %s", error)
+            raise HTTPException(status_code=503, detail="Controller database is not ready") from error
 
     @app.get("/health/live")
     async def live() -> dict[str, str]:
         return {"status": "ok"}
 
     @app.get("/health/ready")
-    async def ready() -> dict[str, str]:
-        return {"status": "ready"}
+    async def ready() -> JSONResponse:
+        database_ready, _error = await database.check_ready()
+        status_code = 200 if database_ready else 503
+        status = "ready" if database_ready else "not_ready"
+        return JSONResponse(status_code=status_code, content={"status": status})
 
     @app.get("/api/v1/status")
     async def status(request: Request) -> dict:
-        speech = await get_speech_status(request.app.state.http_client, speech_settings)
-        controller_status = "ok" if speech["status"] == "ready" else "degraded"
+        speech_result, database_result = await asyncio.gather(
+            get_speech_status(request.app.state.http_client, controller_settings.speech),
+            database.check_ready(),
+        )
+        database_ready, database_error = database_result
+
+        if database_ready:
+            application_settings = await database.get_application_settings()
+            announcements_enabled: bool | None = application_settings.announcements_enabled
+            mode = application_settings.mode
+            database_status = {"status": "ready"}
+        else:
+            announcements_enabled = None
+            mode = "unavailable"
+            database_status = {"status": "unavailable", "error": database_error}
+
+        controller_status = (
+            "ok"
+            if database_ready and speech_result["status"] == "ready"
+            else "degraded"
+        )
         return {
             "status": controller_status,
             "version": __version__,
-            "speech": speech,
+            "announcements_enabled": announcements_enabled,
+            "mode": mode,
+            "database": database_status,
+            "speech": speech_result,
         }
+
+    @app.get("/api/v1/settings", response_model=ApplicationSettingsResponse)
+    async def get_settings() -> ApplicationSettingsResponse:
+        snapshot = await read_application_settings()
+        return ApplicationSettingsResponse.from_snapshot(snapshot)
+
+    @app.patch("/api/v1/settings", response_model=ApplicationSettingsResponse)
+    async def update_settings(payload: ApplicationSettingsPatch) -> ApplicationSettingsResponse:
+        try:
+            snapshot = await database.set_announcements_enabled(payload.announcements_enabled)
+        except Exception as error:
+            logger.warning("Could not update controller settings: %s", error)
+            raise HTTPException(status_code=503, detail="Controller database is not ready") from error
+        return ApplicationSettingsResponse.from_snapshot(snapshot)
 
     return app
 

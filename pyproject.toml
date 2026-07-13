@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "aiosqlite>=0.21.0,<1",
+    "alembic>=1.16.0,<2",
     "fastapi>=0.116.0,<1",
     "httpx>=0.28.0,<1",
     "numpy>=2.0.0",
@@ -13,6 +15,7 @@ dependencies = [
     "scipy>=1.14.0",
     "sounddevice>=0.5.5",
     "soundfile>=0.13.1",
+    "sqlalchemy[asyncio]>=2.0.0,<3",
     "uvicorn[standard]>=0.35.0,<1",
 ]
 

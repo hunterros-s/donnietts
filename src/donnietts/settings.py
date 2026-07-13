@@ -1,9 +1,15 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 
 DEFAULT_TTS_BASE_URL = "http://127.0.0.1:8101/v1"
+
+
+def default_database_path() -> Path:
+    state_home = Path(os.getenv("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    return state_home / "donnietts" / "donnietts.sqlite3"
 
 
 def derive_local_health_url(base_url: str) -> str | None:
@@ -49,3 +55,22 @@ class SpeechSettings:
             health_url=health_url,
             status_timeout_seconds=float(os.getenv("TTS_STATUS_TIMEOUT_SECONDS", "2")),
         )
+
+
+@dataclass(frozen=True)
+class ControllerSettings:
+    speech: SpeechSettings
+    database_path: Path
+
+    @classmethod
+    def from_environment(cls) -> "ControllerSettings":
+        configured_path = os.getenv("DONNIETTS_DB_PATH")
+        database_path = Path(configured_path).expanduser() if configured_path else default_database_path()
+        return cls(
+            speech=SpeechSettings.from_environment(),
+            database_path=database_path,
+        )
+
+    @property
+    def database_url(self) -> str:
+        return f"sqlite+aiosqlite:///{self.database_path}"
