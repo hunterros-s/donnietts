@@ -50,7 +50,13 @@ Or read them directly from the database without a running controller:
 ```bash
 uv run donnietts schedule   # the current schedule
 uv run donnietts runs       # recent run history (--limit N to change the cap)
+uv run donnietts pause      # stop speaking; due runs are skipped as 'paused'
+uv run donnietts resume     # resume speaking
 ```
+
+Pausing keeps the controller and schedule running (the worker skips due runs
+with reason `announcements paused`), so resume is instant. The equivalent API
+is `PATCH /api/v1/settings` with `{"announcements_enabled": false}`.
 
 Pause announcements or update the IANA timezone:
 
@@ -146,6 +152,12 @@ to start at boot, and keeps them running with automatic restarts.
 systemctl --user status donnietts
 journalctl --user -u donnietts -f
 ```
+
+To stop things: `systemctl --user stop donnietts` stops the controller and
+worker (schedule and history stay in the database);
+`systemctl --user stop donnietts-speech` unloads the speech model and frees
+its memory — while it is stopped, due announcements are skipped. To pause
+announcements without stopping anything, use `uv run donnietts pause`.
 
 Override any variable (for example `TTS_BASE_URL` or `DONNIETTS_DB_PATH`) in
 `~/.config/donnietts/env`. The first speech-service start downloads the Qwen

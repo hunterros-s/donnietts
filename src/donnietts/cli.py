@@ -30,6 +30,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers.add_parser("schedule", help="show the current schedule")
 
+    subparsers.add_parser("pause", help="pause announcements (worker skips due runs)")
+    subparsers.add_parser("resume", help="resume paused announcements")
+
     runs = subparsers.add_parser("runs", help="show recent announcement runs")
     runs.add_argument(
         "--limit",
@@ -51,6 +54,28 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds between scheduling passes (default: 30)",
     )
     return parser
+
+
+def set_announcements_enabled(enabled: bool) -> str:
+    """Update the announcements_enabled setting and return a summary line."""
+    from donnietts.database import Database
+    from donnietts.settings import ControllerSettings
+
+    settings = ControllerSettings.from_environment()
+
+    async def update() -> str:
+        database = Database(settings)
+        try:
+            await database.initialize()
+            snapshot = await database.update_application_settings(
+                announcements_enabled=enabled
+            )
+            mode = "active" if snapshot.announcements_enabled else "paused"
+            return f"Announcements are now {mode} (timezone: {snapshot.timezone})."
+        finally:
+            await database.close()
+
+    return asyncio.run(update())
 
 
 def main() -> None:
@@ -125,6 +150,10 @@ def main() -> None:
 
         settings = ControllerSettings.from_environment()
         print(asyncio.run(schedule_text(settings)))
+    elif args.command == "pause":
+        print(set_announcements_enabled(False))
+    elif args.command == "resume":
+        print(set_announcements_enabled(True))
     elif args.command == "runs":
         from donnietts.reporting import runs_text
         from donnietts.settings import ControllerSettings

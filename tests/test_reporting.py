@@ -55,6 +55,22 @@ def test_schedule_text_reports_an_empty_schedule(
     )
 
 
+def test_pause_and_resume_toggle_announcement_mode(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from donnietts import cli
+    from donnietts.settings import ControllerSettings
+
+    monkeypatch.setenv("DONNIETTS_DB_PATH", str(tmp_path / "controller.sqlite3"))
+    settings = ControllerSettings.from_environment()
+
+    assert "paused" in cli.set_announcements_enabled(False)
+    assert "Announcements are paused" in asyncio.run(schedule_text(settings))
+    assert "active" in cli.set_announcements_enabled(True)
+    assert "Announcements are active" in asyncio.run(schedule_text(settings))
+
+
 def test_runs_text_lists_runs_newest_first(
     initialized_settings: ControllerSettings,
 ) -> None:
