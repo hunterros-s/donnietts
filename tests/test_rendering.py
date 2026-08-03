@@ -3,7 +3,8 @@ from datetime import datetime
 
 import httpx
 
-from template import render_template
+from donnietts.context import ContextSettings
+from donnietts.rendering import render_template
 
 
 def test_time_only_template_performs_no_network_requests() -> None:
@@ -67,5 +68,53 @@ def test_location_and_weather_context_use_async_http_client() -> None:
         assert len(requested_urls) == 2
         assert requested_urls[0] == "https://ipapi.co/json/"
         assert requested_urls[1].startswith("https://api.open-meteo.com/v1/forecast?")
+
+    asyncio.run(exercise())
+
+
+def test_render_template_uses_injected_context_settings() -> None:
+    async def exercise() -> None:
+        settings = ContextSettings(
+            user_agent="test-agent/1.0",
+            display_city="kalamazoo",
+            display_state="michigan",
+            fetch_timeout_seconds=5.0,
+        )
+
+        async def handler(request: httpx.Request) -> httpx.Response:
+            assert request.headers["User-Agent"] == "test-agent/1.0"
+            if request.url.host == "ipapi.co":
+                return httpx.Response(
+                    200,
+                    json={"latitude": 42.3, "longitude": -85.6},
+                )
+            if request.url.host == "api.open-meteo.com":
+                return httpx.Response(
+                    200,
+                    json={
+                        "current": {
+                            "temperature_2m": 40,
+                            "weather_code": 0,
+                            "wind_speed_10m": 2,
+                        },
+                        "daily": {
+                            "temperature_2m_max": [48],
+                            "temperature_2m_min": [30],
+                            "precipitation_probability_max": [0],
+                        },
+                        "timezone": "America/Detroit",
+                    },
+                )
+            raise AssertionError(f"Unexpected request: {request.url}")
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            rendered = await render_template(
+                client,
+                "In {location}, it is {weather_condition}.",
+                datetime(2026, 1, 2, 9, 0),
+                settings,
+            )
+
+        assert rendered == "In kalamazoo, michigan, it is clear."
 
     asyncio.run(exercise())
