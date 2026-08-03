@@ -18,5 +18,11 @@ async def say(settings: ControllerSettings, template: str) -> str:
         rendered = await render_template(client, template, datetime.now(), CONTEXT_SETTINGS)
         speech_client = OpenAICompatibleSpeechClient(client, settings.speech)
         wav = await speech_client.generate_wav(rendered)
-        await asyncio.to_thread(play_wav_bytes, wav)
+        try:
+            await asyncio.to_thread(play_wav_bytes, wav)
+        except Exception as error:
+            raise RuntimeError(
+                f"Audio playback failed: {error} "
+                "(is an audio output device available?)"
+            ) from error
     return rendered

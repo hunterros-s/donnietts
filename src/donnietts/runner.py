@@ -19,6 +19,8 @@ def configure_logging() -> None:
     )
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         logging.getLogger(name).setLevel(logging.INFO)
+    # httpx logs every request at INFO; keep daemon logs focused.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 async def run_controller(

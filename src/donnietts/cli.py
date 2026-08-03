@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 
+import httpx
 import uvicorn
 
 
@@ -91,7 +92,32 @@ def main() -> None:
 
         settings = ControllerSettings.from_environment()
         template = " ".join(args.template) or DEFAULT_TEMPLATE
-        rendered = asyncio.run(say_once(settings, template))
+        try:
+            rendered = asyncio.run(say_once(settings, template))
+        except httpx.TimeoutException:
+            raise SystemExit(
+                f"Speech service at {settings.speech.base_url} timed out after "
+                f"{settings.speech.generation_timeout_seconds:g}s. It may still be "
+                "loading the model; check its status with /health/ready."
+            )
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code == 503:
+                raise SystemExit(
+                    "Speech service is not ready (HTTP 503) — it is probably still "
+                    "loading the model. Retry in a moment."
+                ) from error
+            raise SystemExit(
+                f"Speech service returned HTTP {error.response.status_code} "
+                f"for {error.request.url}."
+            ) from error
+        except httpx.RequestError as error:
+            raise SystemExit(
+                f"Could not reach the speech service at {settings.speech.base_url} "
+                f"({type(error).__name__}). Is it running? Start it with "
+                "'uv run qwen-speech serve' from services/qwen-speech."
+            ) from error
+        except Exception as error:
+            raise SystemExit(f"Speech failed: {error}") from error
         print(rendered)
     elif args.command == "schedule":
         from donnietts.reporting import schedule_text
