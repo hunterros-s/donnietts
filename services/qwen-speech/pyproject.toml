@@ -11,6 +11,11 @@ dependencies = [
     "qwen-tts>=0.1.1",
     "soundfile>=0.13.1",
     "torch>=2.12.0,<2.13",
+    # torchaudio must be a DIRECT dependency: uv only honors the cpu-index
+    # source pin below for direct deps. Resolving it transitively via qwen-tts
+    # pulls the CUDA wheel from PyPI, which fails on machines without CUDA
+    # (libcudart.so.N missing).
+    "torchaudio>=2.11.0,<2.12",
     "uvicorn[standard]>=0.35.0,<1",
 ]
 
