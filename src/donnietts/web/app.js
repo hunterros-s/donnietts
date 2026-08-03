@@ -16,6 +16,10 @@ import "/vendor/wa/components/tab-group/tab-group.js";
 import "/vendor/wa/components/dialog/dialog.js";
 import "/vendor/wa/components/popup/popup.js";
 import "/vendor/wa/components/spinner/spinner.js";
+import "/vendor/wa/components/card/card.js";
+import "/vendor/wa/components/badge/badge.js";
+import "/vendor/wa/components/callout/callout.js";
+import "/vendor/wa/components/divider/divider.js";
 import { registerIconLibrary } from "/vendor/wa/components/icon/library.js";
 
 /* The library ships no icon SVGs; register a tiny local set as data URIs so
@@ -72,8 +76,8 @@ async function api(path, options = {}) {
 
 function toast(message, kind = "ok") {
   const el = $("toast");
+  el.variant = kind === "err" ? "danger" : "success";
   el.textContent = message;
-  el.className = `toast ${kind}`;
   el.hidden = false;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { el.hidden = true; }, 3500);
@@ -144,7 +148,7 @@ async function refreshStatus() {
     settings.timezone = status.timezone || settings.timezone;
 
     const chip = $("controller-chip");
-    chip.className = `chip ${status.status === "ok" ? "ok" : status.status === "degraded" ? "degraded" : "down"}`;
+    chip.variant = status.status === "ok" ? "success" : status.status === "degraded" ? "warning" : "danger";
     chip.textContent = status.status === "ok" ? "ONLINE" : status.status === "degraded" ? "DEGRADED" : "DOWN";
     $("version-label").textContent = `v${status.version}`;
     $("tz-label").textContent = status.timezone;
@@ -155,12 +159,14 @@ async function refreshStatus() {
     if (currentTab === "status") renderNextUp();
   } catch (error) {
     const chip = $("controller-chip");
-    chip.className = "chip down";
+    chip.variant = "danger";
     chip.textContent = "UNREACHABLE";
-    $("speech-dot").className = "dot bad";
-    $("speech-status").textContent = "controller unreachable";
-    $("db-dot").className = "dot bad";
-    $("db-status").textContent = "unknown";
+    const speechBadge = $("speech-badge");
+    speechBadge.variant = "danger";
+    speechBadge.textContent = "controller unreachable";
+    const dbBadge = $("db-badge");
+    dbBadge.variant = "danger";
+    dbBadge.textContent = "unknown";
   }
 }
 
@@ -175,29 +181,36 @@ function renderMode() {
 }
 
 function renderSpeech(speech) {
-  const dot = $("speech-dot");
-  const label = $("speech-status");
+  const badge = $("speech-badge");
   const errorEl = $("speech-error");
-  errorEl.textContent = "";
   $("speech-model").textContent = speech.model || "—";
   $("speech-voice").textContent = speech.voice || "—";
   switch (speech.status) {
     case "ready":
-      dot.className = "dot ok"; label.textContent = "Ready"; break;
+      badge.variant = "success"; badge.textContent = "Ready"; break;
     case "warming":
-      dot.className = "dot warn"; label.textContent = "Warming up (model loading)"; break;
+      badge.variant = "warning"; badge.textContent = "Warming up (model loading)"; break;
     case "misconfigured":
-      dot.className = "dot bad"; label.textContent = "Misconfigured"; errorEl.textContent = speech.error || ""; break;
+      badge.variant = "danger"; badge.textContent = "Misconfigured";
+      errorEl.textContent = speech.error || "";
+      errorEl.hidden = !speech.error;
+      break;
     default:
-      dot.className = "dot bad"; label.textContent = "Unavailable"; errorEl.textContent = speech.error || "";
+      badge.variant = "danger"; badge.textContent = "Unavailable";
+      errorEl.textContent = speech.error || "";
+      errorEl.hidden = !speech.error;
   }
 }
 
 function renderDatabase(database) {
-  const dot = $("db-dot");
-  const label = $("db-status");
-  if (database.status === "ready") { dot.className = "dot ok"; label.textContent = "Ready"; }
-  else { dot.className = "dot bad"; label.textContent = database.error || "Unavailable"; }
+  const badge = $("db-badge");
+  if (database.status === "ready") {
+    badge.variant = "success";
+    badge.textContent = "Ready";
+  } else {
+    badge.variant = "danger";
+    badge.textContent = database.error || "Unavailable";
+  }
 }
 
 /* ---------- next up ---------- */
