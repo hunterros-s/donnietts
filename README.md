@@ -162,3 +162,27 @@ announcements without stopping anything, use `uv run donnietts pause`.
 Override any variable (for example `TTS_BASE_URL` or `DONNIETTS_DB_PATH`) in
 `~/.config/donnietts/env`. The first speech-service start downloads the Qwen
 model from Hugging Face, so the controller reports `warming` until it is ready.
+
+## Web UI
+
+The controller serves a small single-page interface at
+<http://127.0.0.1:8000/> (no separate frontend, no build step — it is static
+files served by the FastAPI app, and only reachable from the machine itself):
+
+- **Status** — controller health, a pause/resume switch for announcements, the
+  speech service's state (ready / warming / unavailable), and the next few
+  upcoming announcements.
+- **Schedule** — add, enable/disable, edit, and delete daily and one-off
+  announcements; template text is validated exactly like the API's.
+- **Runs** — recent run history with status and outcome (what was spoken, or
+  why a run was skipped or failed).
+
+To reach it from another machine, tunnel over SSH:
+
+```bash
+ssh -L 8000:127.0.0.1:8000 hunter@donnied   # then open http://127.0.0.1:8000/
+```
+
+It deliberately has no authentication — it binds to loopback only. If you want
+it on your LAN, add a reverse proxy with auth in front of it instead of
+opening the port.

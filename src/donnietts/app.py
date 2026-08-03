@@ -1,11 +1,13 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import NoReturn
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from donnietts import __version__
 from donnietts.api_models import (
@@ -235,6 +237,12 @@ def create_app(settings: ControllerSettings | None = None) -> FastAPI:
             logger.warning("Could not update controller settings: %s", error)
             raise HTTPException(status_code=503, detail="Controller database is not ready") from error
         return ApplicationSettingsResponse.from_snapshot(snapshot)
+
+    # The web UI is a static single page served from the package directory.
+    # It is mounted last so every API route above takes precedence.
+    web_dir = Path(__file__).resolve().parent / "web"
+    if web_dir.is_dir():
+        app.mount("/", StaticFiles(directory=web_dir, html=True), name="web")
 
     return app
 
