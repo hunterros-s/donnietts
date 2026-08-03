@@ -22,18 +22,17 @@ uv run donnietts say "Hello."
 generates speech, prepends the chime, and plays it. Pass any template, e.g.
 `uv run donnietts say "It is {time} in {location}."`
 
-Start the controller API:
+Start the controller API and announcement worker together in one process:
 
 ```bash
-uv run donnietts serve
+uv run donnietts run
 ```
 
-In a third terminal, run the announcement worker, which materializes runs from the
-announcements table, generates speech before each scheduled time, and plays it:
-
-```bash
-uv run donnietts worker
-```
+`run` serves the API on `127.0.0.1:8000` and runs the scheduler (which
+materializes runs from the announcements table, generates speech before each
+scheduled time, and plays it) in the same process. The pieces are also
+available separately for development: `uv run donnietts serve` (API only) and
+`uv run donnietts worker` (scheduler only).
 
 The controller creates its database schema and default settings automatically on
 startup, so no separate setup step is required.
@@ -129,3 +128,25 @@ uv run pytest
 ```
 
 The controller tests use isolated temporary SQLite databases and do not modify the configured application database.
+
+## Running as a systemd service
+
+For a machine that should announce around the clock, install two user services
+after syncing dependencies:
+
+```bash
+scripts/install-systemd.sh --start
+```
+
+This installs `donnietts-speech` (the Qwen speech service) and `donnietts` (the
+controller API + worker in one process) as systemd user services, enables them
+to start at boot, and keeps them running with automatic restarts.
+
+```bash
+systemctl --user status donnietts
+journalctl --user -u donnietts -f
+```
+
+Override any variable (for example `TTS_BASE_URL` or `DONNIETTS_DB_PATH`) in
+`~/.config/donnietts/env`. The first speech-service start downloads the Qwen
+model from Hugging Face, so the controller reports `warming` until it is ready.

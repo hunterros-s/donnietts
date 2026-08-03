@@ -36,17 +36,34 @@ def build_parser() -> argparse.ArgumentParser:
         default=20,
         help="maximum runs to show (default: 20)",
     )
+
+    run = subparsers.add_parser(
+        "run",
+        help="run the controller API and announcement worker together",
+    )
+    run.add_argument("--host", default="127.0.0.1")
+    run.add_argument("--port", type=int, default=8000)
+    run.add_argument(
+        "--poll-seconds",
+        type=float,
+        default=30.0,
+        help="seconds between scheduling passes (default: 30)",
+    )
     return parser
 
 
 def main() -> None:
     args = build_parser().parse_args()
+    from donnietts.runner import configure_logging
+
+    configure_logging()
     if args.command == "serve":
         uvicorn.run(
             "donnietts.app:app",
             host=args.host,
             port=args.port,
             workers=1,
+            log_config=None,
         )
     elif args.command == "worker":
         from donnietts.settings import ControllerSettings
@@ -54,6 +71,19 @@ def main() -> None:
 
         settings = ControllerSettings.from_environment()
         asyncio.run(run_worker(settings, poll_interval_seconds=args.poll_seconds))
+    elif args.command == "run":
+        from donnietts.runner import run_controller
+        from donnietts.settings import ControllerSettings
+
+        settings = ControllerSettings.from_environment()
+        asyncio.run(
+            run_controller(
+                settings,
+                host=args.host,
+                port=args.port,
+                poll_interval_seconds=args.poll_seconds,
+            )
+        )
     elif args.command == "say":
         from donnietts.rendering import DEFAULT_TEMPLATE
         from donnietts.say import say as say_once
