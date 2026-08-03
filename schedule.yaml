@@ -4,84 +4,202 @@ defaults:
 announcements:
   - time: "08:00"
     template: >-
-      Hi Donnie. Good morning. It is {time} on {weekday}, {date}.
+      Good morning. It is {time} on {weekday}, {date}.
       In {location}, the morning is {weather_condition} and {current_temp} degrees.
       The forecast high is {high_temp} degrees, the low is {low_temp} degrees, wind is {wind}, and precipitation chance is {precip_chance}.
 
+  - time: "08:15"
+    template: It is {time}.
+
+  - time: "08:30"
+    template: It is {time}.
+
+  - time: "08:45"
+    template: It is {time}.
+
   - time: "09:00"
     template: >-
-      Hi Donnie. Nine o'clock update for {weekday}, {date}.
+      Nine o'clock update for {weekday}, {date}.
       {location} is currently {current_temp} degrees with {weather_condition} conditions.
       Today's range is {low_temp} to {high_temp} degrees, with wind at {wind}.
 
+  - time: "09:15"
+    template: It is {time}.
+
+  - time: "09:30"
+    template: It is {time}.
+
+  - time: "09:45"
+    template: It is {time}.
+
   - time: "10:00"
     template: >-
-      Hi Donnie. It is {time}.
+      It is {time}.
       Current weather in {location}: {weather_condition}, {current_temp} degrees, wind {wind}.
       The chance of precipitation today is {precip_chance}, with a high near {high_temp} degrees.
 
+  - time: "10:15"
+    template: It is {time}.
+
+  - time: "10:30"
+    template: It is {time}.
+
+  - time: "10:45"
+    template: It is {time}.
+
   - time: "11:00"
     template: >-
-      Hi Donnie. Late morning briefing for {weekday}, {date}.
+      Late morning briefing for {weekday}, {date}.
       In {location}, it is {current_temp} degrees and {weather_condition}.
       The forecast still shows a high of {high_temp} degrees and a low of {low_temp} degrees.
 
+  - time: "11:15"
+    template: It is {time}.
+
+  - time: "11:30"
+    template: It is {time}.
+
+  - time: "11:45"
+    template: It is {time}.
+
   - time: "12:00"
     template: >-
-      Hi Donnie. Good afternoon. It is noon on {weekday}, {date}.
+      Good afternoon. It is noon on {weekday}, {date}.
       Conditions in {location} are {weather_condition}, with the temperature at {current_temp} degrees.
       Wind is {wind}, and precipitation chance is {precip_chance}.
 
+  - time: "12:15"
+    template: It is {time}.
+
+  - time: "12:30"
+    template: It is {time}.
+
+  - time: "12:45"
+    template: It is {time}.
+
   - time: "13:00"
     template: >-
-      Hi Donnie. One o'clock report.
+      One o'clock report.
       {location} is at {current_temp} degrees under {weather_condition} skies.
       Today is expected to top out near {high_temp} degrees and fall to {low_temp} degrees.
 
+  - time: "13:15"
+    template: It is {time}.
+
+  - time: "13:30"
+    template: It is {time}.
+
+  - time: "13:45"
+    template: It is {time}.
+
   - time: "14:00"
     template: >-
-      Hi Donnie. It is {time} on {weekday}, {date}.
+      It is {time} on {weekday}, {date}.
       The afternoon reading in {location} is {current_temp} degrees with {weather_condition} conditions.
       Wind is {wind}; precipitation chance remains {precip_chance}.
 
+  - time: "14:15"
+    template: It is {time}.
+
+  - time: "14:30"
+    template: It is {time}.
+
+  - time: "14:45"
+    template: It is {time}.
+
   - time: "15:00"
     template: >-
-      Hi Donnie. Three o'clock update.
+      Three o'clock update.
       In {location}, the temperature is {current_temp} degrees and the weather is {weather_condition}.
       The daily high is {high_temp} degrees, with tonight's low near {low_temp} degrees.
+      It is time for Donnie's three PM medicine.
+
+  - time: "15:15"
+    template: It is {time}.
+
+  - time: "15:30"
+    template: It is {time}.
+
+  - time: "15:45"
+    template: It is {time}.
 
   - time: "16:00"
     template: >-
-      Hi Donnie. Four o'clock briefing for {weekday}, {date}.
+      Four o'clock briefing for {weekday}, {date}.
       Current conditions in {location}: {weather_condition}, {current_temp} degrees.
       Wind is {wind}, and the chance of precipitation is {precip_chance}.
 
+  - time: "16:15"
+    template: It is {time}.
+
+  - time: "16:30"
+    template: It is {time}.
+
+  - time: "16:45"
+    template: It is {time}.
+
   - time: "17:00"
     template: >-
-      Hi Donnie. It is {time}.
+      It is {time}.
       In {location}, evening conditions are beginning at {current_temp} degrees with {weather_condition} weather.
       Today's high is {high_temp} degrees, and the low tonight is expected to be {low_temp} degrees.
 
+  - time: "17:15"
+    template: It is {time}.
+
+  - time: "17:30"
+    template: It is {time}.
+
+  - time: "17:45"
+    template: It is {time}.
+
   - time: "18:00"
     template: >-
-      Hi Donnie. Good evening. Six o'clock weather for {location}.
+      Good evening. Six o'clock weather for {location}.
       It is currently {current_temp} degrees and {weather_condition}.
       Wind is {wind}, with precipitation chance at {precip_chance}.
 
+  - time: "18:15"
+    template: It is {time}.
+
+  - time: "18:30"
+    template: It is {time}.
+
+  - time: "18:45"
+    template: It is {time}.
+
   - time: "19:00"
     template: >-
-      Hi Donnie. Seven o'clock check-in on {weekday}, {date}.
+      Seven o'clock check-in on {weekday}, {date}.
       {location} is reporting {weather_condition} conditions and {current_temp} degrees.
       The overnight low is expected to be {low_temp} degrees.
 
+  - time: "19:15"
+    template: It is {time}.
+
+  - time: "19:30"
+    template: It is {time}.
+
+  - time: "19:45"
+    template: It is {time}.
+
   - time: "20:00"
     template: >-
-      Hi Donnie. It is {time}.
+      It is {time}.
       The evening forecast in {location} is {weather_condition}, currently {current_temp} degrees.
       Wind is {wind}, and precipitation chance is {precip_chance}.
 
+  - time: "20:15"
+    template: It is {time}.
+
+  - time: "20:30"
+    template: It is {time}.
+
+  - time: "20:45"
+    template: It is {time}.
+
   - time: "21:00"
     template: >-
-      Hi Donnie. Good night. Final briefing for {weekday}, {date}.
+      Good night. Final briefing for {weekday}, {date}.
       In {location}, it is {current_temp} degrees with {weather_condition} conditions.
       Tonight's low is expected to be {low_temp} degrees.
