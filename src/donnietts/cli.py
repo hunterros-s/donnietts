@@ -19,6 +19,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=30.0,
         help="seconds between scheduling passes (default: 30)",
     )
+
+    say = subparsers.add_parser("say", help="render and speak an announcement template")
+    say.add_argument(
+        "template",
+        nargs="*",
+        help="template text; defaults to the daily briefing template",
+    )
     return parser
 
 
@@ -37,6 +44,15 @@ def main() -> None:
 
         settings = ControllerSettings.from_environment()
         asyncio.run(run_worker(settings, poll_interval_seconds=args.poll_seconds))
+    elif args.command == "say":
+        from donnietts.rendering import DEFAULT_TEMPLATE
+        from donnietts.say import say as say_once
+        from donnietts.settings import ControllerSettings
+
+        settings = ControllerSettings.from_environment()
+        template = " ".join(args.template) or DEFAULT_TEMPLATE
+        rendered = asyncio.run(say_once(settings, template))
+        print(rendered)
 
 
 if __name__ == "__main__":

@@ -15,14 +15,14 @@ uv run qwen-speech serve
 Then, from the repository root, test speech playback:
 
 ```bash
-uv run python speak.py "Hello."
+uv run donnietts say "Hello."
 ```
 
-Initialize the controller database and start its API in another terminal:
+`say` renders the template (defaulting to the daily briefing), prints the text,
+generates speech, prepends the chime, and plays it. Pass any template, e.g.
+`uv run donnietts say "It is {time} in {location}."`
 
-```bash
-uv run donnietts serve
-```
+Start the controller API:
 
 In a third terminal, run the announcement worker, which materializes runs from the
 announcements table, generates speech before each scheduled time, and plays it:
@@ -86,6 +86,16 @@ Its readiness endpoint returns `503` if its database is unavailable.
 The controller defaults to `http://127.0.0.1:8101/v1` using the `qwen3-tts-0.6b` model and `announcer` voice.
 
 The SQLite database defaults to `~/.local/state/donnietts/donnietts.sqlite3`. Override it with `DONNIETTS_DB_PATH`.
+
+## Context and audio configuration
+
+Template rendering fetches location (via IP) and weather (open-meteo) when the
+template uses those fields:
+
+- `DONNIETTS_DISPLAY_CITY` / `DONNIETTS_DISPLAY_STATE`: spoken location name; defaults to `edwardsburg, michigan`
+- `DONNIETTS_USER_AGENT`: user agent for context lookups; defaults to `chime-announcement/0.1`
+- `DONNIETTS_FETCH_TIMEOUT_SECONDS`: context lookup timeout; defaults to `20`
+- `DONNIETTS_CHIME_AUDIO` / `DONNIETTS_SOUND_OFF_AUDIO`: chime and closing sound paths; default to `assets/startup3.mp3` and `assets/sound_off.mp3`
 
 ## Speech endpoint configuration
 

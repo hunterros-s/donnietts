@@ -53,7 +53,7 @@
             shellHook = ''
               echo "Nix shell ready: Python $(python --version), uv $(uv --version)"
               echo "First run: uv sync --frozen"
-              echo "Then run:  uv run python speak.py"
+              echo "Then run:  uv run donnietts say 'Hello.'"
             '';
           };
         });

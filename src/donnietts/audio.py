@@ -1,5 +1,6 @@
 """Audio loading, chime preparation, and playback."""
 
+import io
 import math
 import os
 from pathlib import Path
@@ -57,5 +58,17 @@ def play_wav_file(path: str | Path) -> None:
     samples, sample_rate = sf.read(path, dtype="float32")
     if samples.ndim > 1:
         samples = samples.mean(axis=1)
+    _play_samples(samples, sample_rate)
+
+
+def play_wav_bytes(wav: bytes) -> None:
+    """Decode WAV bytes, prepend the chime, and play them synchronously."""
+    samples, sample_rate = sf.read(io.BytesIO(wav), dtype="float32")
+    if samples.ndim > 1:
+        samples = samples.mean(axis=1)
+    _play_samples(samples, sample_rate)
+
+
+def _play_samples(samples: np.ndarray, sample_rate: int) -> None:
     combined = prepend_chime(samples, sample_rate)
     play_audio(combined, sample_rate)
