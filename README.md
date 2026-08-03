@@ -46,6 +46,13 @@ curl http://127.0.0.1:8000/api/v1/settings
 curl http://127.0.0.1:8000/api/v1/announcements
 ```
 
+Or read them directly from the database without a running controller:
+
+```bash
+uv run donnietts schedule   # the current schedule
+uv run donnietts runs       # recent run history (--limit N to change the cap)
+```
+
 Pause announcements or update the IANA timezone:
 
 ```bash

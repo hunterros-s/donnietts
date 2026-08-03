@@ -26,6 +26,16 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="*",
         help="template text; defaults to the daily briefing template",
     )
+
+    subparsers.add_parser("schedule", help="show the current schedule")
+
+    runs = subparsers.add_parser("runs", help="show recent announcement runs")
+    runs.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="maximum runs to show (default: 20)",
+    )
     return parser
 
 
@@ -53,6 +63,18 @@ def main() -> None:
         template = " ".join(args.template) or DEFAULT_TEMPLATE
         rendered = asyncio.run(say_once(settings, template))
         print(rendered)
+    elif args.command == "schedule":
+        from donnietts.reporting import schedule_text
+        from donnietts.settings import ControllerSettings
+
+        settings = ControllerSettings.from_environment()
+        print(asyncio.run(schedule_text(settings)))
+    elif args.command == "runs":
+        from donnietts.reporting import runs_text
+        from donnietts.settings import ControllerSettings
+
+        settings = ControllerSettings.from_environment()
+        print(asyncio.run(runs_text(settings, limit=args.limit)))
 
 
 if __name__ == "__main__":
