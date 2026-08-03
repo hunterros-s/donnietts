@@ -21,11 +21,18 @@ uv run python speak.py "Hello."
 Initialize the controller database and start its API in another terminal:
 
 ```bash
-uv run donnietts db upgrade
 uv run donnietts serve
 ```
 
-The database migration seeds the existing daily schedule the first time it is applied.
+In a third terminal, run the announcement worker, which materializes runs from the
+announcements table, generates speech before each scheduled time, and plays it:
+
+```bash
+uv run donnietts worker
+```
+
+The controller creates its database schema and default settings automatically on
+startup, so no separate setup step is required.
 
 Inspect its status and persisted settings:
 
@@ -73,7 +80,8 @@ curl -X DELETE 'http://127.0.0.1:8000/api/v1/announcements/15?expected_revision=
 
 Supported template fields are `time`, `weekday`, `date`, `location`, `city`, `state`, `latitude`, `longitude`, `weather_condition`, `current_temp`, `high_temp`, `low_temp`, `wind`, `wind_speed`, and `precip_chance`.
 
-The controller stays available and reports `degraded` if the speech service is unavailable. Its readiness endpoint returns `503` until database migrations have been applied.
+The controller stays available and reports `degraded` if the speech service is unavailable.
+Its readiness endpoint returns `503` if its database is unavailable.
 
 The controller defaults to `http://127.0.0.1:8101/v1` using the `qwen3-tts-0.6b` model and `announcer` voice.
 

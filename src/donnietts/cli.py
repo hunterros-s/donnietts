@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 
 import uvicorn
 
@@ -11,9 +12,13 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
 
-    database = subparsers.add_parser("db", help="manage the controller database")
-    database_subparsers = database.add_subparsers(dest="database_command", required=True)
-    database_subparsers.add_parser("upgrade", help="apply all database migrations")
+    worker = subparsers.add_parser("worker", help="run the announcement scheduler")
+    worker.add_argument(
+        "--poll-seconds",
+        type=float,
+        default=30.0,
+        help="seconds between scheduling passes (default: 30)",
+    )
     return parser
 
 
@@ -26,13 +31,12 @@ def main() -> None:
             port=args.port,
             workers=1,
         )
-    elif args.command == "db" and args.database_command == "upgrade":
-        from donnietts.migration_runner import upgrade_database
+    elif args.command == "worker":
         from donnietts.settings import ControllerSettings
+        from donnietts.worker import run_worker
 
         settings = ControllerSettings.from_environment()
-        upgrade_database(settings)
-        print(f"Database upgraded: {settings.database_path}")
+        asyncio.run(run_worker(settings, poll_interval_seconds=args.poll_seconds))
 
 
 if __name__ == "__main__":

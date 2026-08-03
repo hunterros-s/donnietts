@@ -13,7 +13,6 @@ chime_announcement.wav
 
 # Local assets / archived experiments
 archive/
-assets/
 
 # Virtual environments
 .venv

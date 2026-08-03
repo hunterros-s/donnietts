@@ -1,10 +1,11 @@
+import asyncio
 from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
 
 from donnietts.app import create_app
-from donnietts.migration_runner import upgrade_database
+from donnietts.database import Database
 from donnietts.settings import ControllerSettings, SpeechSettings
 
 
@@ -26,12 +27,16 @@ def controller_settings(tmp_path) -> ControllerSettings:
 
 
 @pytest.fixture
-def migrated_settings(controller_settings: ControllerSettings) -> ControllerSettings:
-    upgrade_database(controller_settings)
+def initialized_settings(controller_settings: ControllerSettings) -> ControllerSettings:
+    database = Database(controller_settings)
+    try:
+        asyncio.run(database.initialize())
+    finally:
+        asyncio.run(database.close())
     return controller_settings
 
 
 @pytest.fixture
-def client(migrated_settings: ControllerSettings) -> Iterator[TestClient]:
-    with TestClient(create_app(migrated_settings)) as test_client:
+def client(initialized_settings: ControllerSettings) -> Iterator[TestClient]:
+    with TestClient(create_app(initialized_settings)) as test_client:
         yield test_client

@@ -1,9 +1,7 @@
 import asyncio
-import sqlite3
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from alembic import command
 
 from donnietts.announcement_runs import (
     AnnouncementRunNotFoundError,
@@ -15,7 +13,6 @@ from donnietts.announcement_runs import (
     RunStateConflictError,
 )
 from donnietts.database import Database
-from donnietts.migration_runner import migration_config
 from donnietts.settings import ControllerSettings
 
 
@@ -32,39 +29,20 @@ async def create_source(database: Database, minute_of_day: int = 7 * 60 + 30):
     )
 
 
-def test_durable_checkpoint_migration_resets_in_progress_generation(
-    controller_settings: ControllerSettings,
+def test_database_initialization_seeds_the_settings_row(
+    initialized_settings: ControllerSettings,
 ) -> None:
-    config = migration_config()
-    config.set_main_option("sqlalchemy.url", controller_settings.database_url)
-    command.upgrade(config, "0005")
-    with sqlite3.connect(controller_settings.database_path) as connection:
-        connection.execute(
-            """
-            INSERT INTO announcement_runs (
-                announcement_id,
-                announcement_revision,
-                announcement_kind,
-                scheduled_for_utc,
-                generation_due_at_utc,
-                status,
-                template_snapshot,
-                attempt_count
-            ) VALUES (1, 1, 'daily', ?, ?, 'generating', 'Test', 1)
-            """,
-            (SCHEDULED.isoformat(), GENERATION_DUE.isoformat()),
-        )
+    async def exercise() -> None:
+        database = Database(initialized_settings)
+        try:
+            await database.initialize()
+            settings = await database.get_application_settings()
+            assert settings.announcements_enabled is True
+            assert settings.timezone == "America/Detroit"
+        finally:
+            await database.close()
 
-    command.upgrade(config, "head")
-
-    with sqlite3.connect(controller_settings.database_path) as connection:
-        status = connection.execute("SELECT status FROM announcement_runs").fetchone()[0]
-        columns = {
-            row[1] for row in connection.execute("PRAGMA table_info(announcement_runs)")
-        }
-    assert status == "planned"
-    assert "attempt_count" not in columns
-    assert "generation_started_at" not in columns
+    asyncio.run(exercise())
 
 
 async def create_run(
@@ -82,10 +60,10 @@ async def create_run(
 
 
 def test_planned_run_snapshots_its_source_and_rejects_duplicates(
-    migrated_settings: ControllerSettings,
+    initialized_settings: ControllerSettings,
 ) -> None:
     async def exercise() -> None:
-        database = Database(migrated_settings)
+        database = Database(initialized_settings)
         try:
             source = await create_source(database)
             scheduled_with_offset = datetime.fromisoformat("2100-01-02T10:00:00-05:00")
@@ -120,9 +98,9 @@ def test_planned_run_snapshots_its_source_and_rejects_duplicates(
     asyncio.run(exercise())
 
 
-def test_run_creation_validates_source_and_times(migrated_settings: ControllerSettings) -> None:
+def test_run_creation_validates_source_and_times(initialized_settings: ControllerSettings) -> None:
     async def exercise() -> None:
-        database = Database(migrated_settings)
+        database = Database(initialized_settings)
         try:
             source = await create_source(database)
             with pytest.raises(RunSourceNotFoundError):
@@ -150,10 +128,10 @@ def test_run_creation_validates_source_and_times(migrated_settings: ControllerSe
 
 
 def test_run_preserves_snapshots_after_source_edit_and_delete(
-    migrated_settings: ControllerSettings,
+    initialized_settings: ControllerSettings,
 ) -> None:
     async def exercise() -> None:
-        database = Database(migrated_settings)
+        database = Database(initialized_settings)
         try:
             source = await create_source(database)
             run = await database.runs.create_planned(
@@ -182,9 +160,9 @@ def test_run_preserves_snapshots_after_source_edit_and_delete(
     asyncio.run(exercise())
 
 
-def test_run_happy_path_records_state_timestamps(migrated_settings: ControllerSettings) -> None:
+def test_run_happy_path_records_state_timestamps(initialized_settings: ControllerSettings) -> None:
     async def exercise() -> None:
-        database = Database(migrated_settings)
+        database = Database(initialized_settings)
         try:
             planned = await create_run(database)
             ready_at = GENERATION_DUE + timedelta(seconds=2)
@@ -237,10 +215,10 @@ def test_run_happy_path_records_state_timestamps(migrated_settings: ControllerSe
 
 
 def test_invalid_and_conflicting_transitions_are_rejected(
-    migrated_settings: ControllerSettings,
+    initialized_settings: ControllerSettings,
 ) -> None:
     async def exercise() -> None:
-        database = Database(migrated_settings)
+        database = Database(initialized_settings)
         try:
             planned = await create_run(database)
             with pytest.raises(InvalidRunTransitionError):
@@ -299,10 +277,10 @@ def test_invalid_and_conflicting_transitions_are_rejected(
 
 
 def test_ready_and_failed_transitions_require_outputs(
-    migrated_settings: ControllerSettings,
+    initialized_settings: ControllerSettings,
 ) -> None:
     async def exercise() -> None:
-        database = Database(migrated_settings)
+        database = Database(initialized_settings)
         try:
             run = await create_run(database)
             with pytest.raises(InvalidRunDataError, match="audio_path"):
@@ -334,10 +312,10 @@ def test_ready_and_failed_transitions_require_outputs(
 
 
 def test_cancellation_and_interruption_record_reasons(
-    migrated_settings: ControllerSettings,
+    initialized_settings: ControllerSettings,
 ) -> None:
     async def exercise() -> None:
-        database = Database(migrated_settings)
+        database = Database(initialized_settings)
         try:
             cancelled_run = await create_run(database, minute_of_day=7 * 60)
             cancelled = await database.runs.transition(
@@ -377,10 +355,10 @@ def test_cancellation_and_interruption_record_reasons(
 
 
 def test_concurrent_ready_commits_allow_only_one_winner(
-    migrated_settings: ControllerSettings,
+    initialized_settings: ControllerSettings,
 ) -> None:
     async def exercise() -> tuple[list[AnnouncementRunSnapshot], list[Exception], str]:
-        database = Database(migrated_settings)
+        database = Database(initialized_settings)
         try:
             run = await create_run(database)
             results = await asyncio.gather(
@@ -415,11 +393,58 @@ def test_concurrent_ready_commits_allow_only_one_winner(
     assert status == "ready"
 
 
+def test_due_generation_and_playback_queries_select_by_time(
+    initialized_settings: ControllerSettings,
+) -> None:
+    async def exercise() -> tuple[set[int], set[int], set[int], set[int]]:
+        database = Database(initialized_settings)
+        try:
+            due_planned = await create_run(database, minute_of_day=7 * 60)
+            future_planned = await create_run(
+                database,
+                minute_of_day=7 * 60 + 1,
+                scheduled_for_utc=SCHEDULED + timedelta(hours=1),
+            )
+            ready_now = await create_run(database, minute_of_day=7 * 60 + 2)
+            ready_future = await create_run(
+                database,
+                minute_of_day=7 * 60 + 3,
+                scheduled_for_utc=SCHEDULED + timedelta(hours=3),
+            )
+            for run in (ready_now, ready_future):
+                await database.runs.transition(
+                    run.id,
+                    expected_status="planned",
+                    new_status="ready",
+                    rendered_text="Ready",
+                    audio_path=f"/tmp/{run.id}.wav",
+                )
+
+            now = SCHEDULED + timedelta(minutes=1)
+            due_generation = await database.runs.list_due_generation(now)
+            due_playback = await database.runs.list_due_playback(now)
+            return (
+                {run.id for run in due_generation},
+                {due_planned.id},
+                {run.id for run in due_playback},
+                {ready_now.id},
+            )
+        finally:
+            await database.close()
+
+    generation_ids, expected_generation_ids, playback_ids, expected_playback_ids = (
+        asyncio.run(exercise())
+    )
+
+    assert generation_ids == expected_generation_ids
+    assert playback_ids == expected_playback_ids
+
+
 def test_stale_playing_query_supports_restart_recovery(
-    migrated_settings: ControllerSettings,
+    initialized_settings: ControllerSettings,
 ) -> None:
     async def exercise() -> tuple[set[int], set[int], set[int]]:
-        database = Database(migrated_settings)
+        database = Database(initialized_settings)
         try:
             old_playing = await create_run(
                 database,

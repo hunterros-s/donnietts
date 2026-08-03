@@ -2,13 +2,12 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import delete, event, select, text, update
+from sqlalchemy import delete, event, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 from donnietts.announcement_runs import AnnouncementRunRepository, CANCELLABLE_STATUSES
-from donnietts.migration_runner import schema_head_revision
-from donnietts.models import Announcement, AnnouncementRun, ApplicationSettings
+from donnietts.models import Announcement, AnnouncementRun, ApplicationSettings, Base
 from donnietts.settings import ControllerSettings
 
 
@@ -65,10 +64,10 @@ class AnnouncementSnapshot:
 
 class Database:
     def __init__(self, settings: ControllerSettings):
+        self.settings = settings
         self.engine: AsyncEngine = create_async_engine(settings.database_url)
         self.sessions = async_sessionmaker(self.engine, expire_on_commit=False)
         self.runs = AnnouncementRunRepository(self.sessions)
-        self.schema_head = schema_head_revision()
 
         @event.listens_for(self.engine.sync_engine, "connect")
         def configure_sqlite(dbapi_connection, _connection_record) -> None:
@@ -78,22 +77,33 @@ class Database:
             cursor.execute("PRAGMA busy_timeout=5000")
             cursor.close()
 
+    async def initialize(self) -> None:
+        """Create the schema and singleton settings row if they do not exist."""
+        self.settings.database_path.parent.mkdir(parents=True, exist_ok=True)
+        async with self.engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        try:
+            async with self.sessions.begin() as session:
+                if await session.get(ApplicationSettings, 1) is None:
+                    session.add(
+                        ApplicationSettings(
+                            id=1,
+                            announcements_enabled=True,
+                            timezone="America/Detroit",
+                        )
+                    )
+        except IntegrityError:
+            # Another process created the settings row concurrently.
+            pass
+
     async def close(self) -> None:
         await self.engine.dispose()
 
     async def check_ready(self) -> tuple[bool, str | None]:
         try:
-            async with self.sessions() as session:
-                current_revision = await session.scalar(
-                    text("SELECT version_num FROM alembic_version")
-                )
-            if current_revision != self.schema_head:
-                return (
-                    False,
-                    f"Database migration required (current: {current_revision}, "
-                    f"expected: {self.schema_head})",
-                )
             await self.get_application_settings()
+        except RuntimeError:
+            return False, "Application settings are not initialized"
         except OperationalError as error:
             logger.warning("Database readiness check failed: %s", error)
             if "no such table" in str(error):
@@ -101,7 +111,7 @@ class Database:
             return False, "Database is unavailable"
         except Exception as error:
             logger.warning("Database readiness check failed: %s", error)
-            return False, "Database settings are unavailable"
+            return False, "Application settings are unavailable"
         return True, None
 
     async def get_application_settings(self) -> ApplicationSettingsSnapshot:

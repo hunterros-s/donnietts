@@ -11,6 +11,7 @@ from donnietts import __version__
 from donnietts.api_models import (
     AnnouncementPatch,
     AnnouncementResponse,
+    AnnouncementRunResponse,
     ApplicationSettingsPatch,
     ApplicationSettingsResponse,
     DailyAnnouncementCreate,
@@ -54,6 +55,7 @@ def create_app(settings: ControllerSettings | None = None) -> FastAPI:
         )
         app.state.database = database
         try:
+            await database.initialize()
             yield
         finally:
             await app.state.http_client.aclose()
@@ -204,6 +206,18 @@ def create_app(settings: ControllerSettings | None = None) -> FastAPI:
         except Exception as error:
             raise_announcement_http_error(error)
         return Response(status_code=204)
+
+    @app.get("/api/v1/runs", response_model=list[AnnouncementRunResponse])
+    async def list_runs() -> list[AnnouncementRunResponse]:
+        try:
+            runs = await database.runs.list_all()
+        except Exception as error:
+            logger.warning("Could not list announcement runs: %s", error)
+            raise HTTPException(
+                status_code=503,
+                detail="Controller database is not ready",
+            ) from error
+        return [AnnouncementRunResponse.from_snapshot(run) for run in runs]
 
     @app.get("/api/v1/settings", response_model=ApplicationSettingsResponse)
     async def get_settings() -> ApplicationSettingsResponse:

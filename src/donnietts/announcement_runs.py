@@ -162,6 +162,38 @@ class AnnouncementRunRepository:
             )
             return [self._snapshot(row) for row in rows]
 
+    async def list_due_generation(
+        self,
+        now_utc: datetime,
+    ) -> list[AnnouncementRunSnapshot]:
+        now_utc = self._normalize_utc(now_utc, "now_utc")
+        async with self.sessions() as session:
+            rows = await session.scalars(
+                select(AnnouncementRun)
+                .where(
+                    AnnouncementRun.status == "planned",
+                    AnnouncementRun.generation_due_at_utc <= now_utc,
+                )
+                .order_by(AnnouncementRun.generation_due_at_utc, AnnouncementRun.id)
+            )
+            return [self._snapshot(row) for row in rows]
+
+    async def list_due_playback(
+        self,
+        now_utc: datetime,
+    ) -> list[AnnouncementRunSnapshot]:
+        now_utc = self._normalize_utc(now_utc, "now_utc")
+        async with self.sessions() as session:
+            rows = await session.scalars(
+                select(AnnouncementRun)
+                .where(
+                    AnnouncementRun.status == "ready",
+                    AnnouncementRun.scheduled_for_utc <= now_utc,
+                )
+                .order_by(AnnouncementRun.scheduled_for_utc, AnnouncementRun.id)
+            )
+            return [self._snapshot(row) for row in rows]
+
     async def transition(
         self,
         run_id: int,

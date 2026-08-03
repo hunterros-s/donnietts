@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,19 +19,49 @@ FUTURE_TIME = "2100-01-01T14:30:00-05:00"
 LATER_FUTURE_TIME = "2100-01-02T14:30:00-05:00"
 
 
-def test_migration_seeds_the_legacy_schedule(client: TestClient) -> None:
+def test_runs_endpoint_reports_durable_runs(
+    client: TestClient,
+    initialized_settings: ControllerSettings,
+) -> None:
+    async def seed() -> None:
+        database = Database(initialized_settings)
+        try:
+            source = await database.create_daily_announcement(
+                minute_of_day=7 * 60,
+                template="It is {time}.",
+                enabled=True,
+                lead_seconds=300,
+            )
+            await database.runs.create_planned(
+                source.id,
+                scheduled_for_utc=datetime.fromisoformat("2100-01-02T15:00:00+00:00"),
+                generation_due_at_utc=datetime.fromisoformat("2100-01-02T14:55:00+00:00"),
+            )
+        finally:
+            await database.close()
+
+    asyncio.run(seed())
+
+    response = client.get("/api/v1/runs")
+    assert response.status_code == 200
+    runs = response.json()
+    assert len(runs) == 1
+    assert runs[0]["status"] == "planned"
+    assert runs[0]["template_snapshot"] == "It is {time}."
+    assert runs[0]["scheduled_for_utc"].startswith("2100-01-02T15:00:00")
+
+
+def test_runs_endpoint_is_empty_before_any_run_is_materialized(client: TestClient) -> None:
+    response = client.get("/api/v1/runs")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_migration_creates_an_empty_announcement_set(client: TestClient) -> None:
     response = client.get(API)
 
     assert response.status_code == 200
-    announcements = response.json()
-    assert len(announcements) == 14
-    assert [item["time"] for item in announcements] == [
-        f"{hour:02d}:00" for hour in range(8, 22)
-    ]
-    assert all(item["kind"] == "daily" for item in announcements)
-    assert all(item["enabled"] for item in announcements)
-    assert all(item["lead_seconds"] == 300 for item in announcements)
-    assert all(item["revision"] == 1 for item in announcements)
+    assert response.json() == []
 
     settings = client.get("/api/v1/settings")
     assert settings.status_code == 200
@@ -267,9 +298,9 @@ def test_invalid_patches_are_rejected(client: TestClient, patch: dict) -> None:
     assert response.status_code == 422
 
 
-def test_concurrent_updates_allow_only_one_writer(migrated_settings: ControllerSettings) -> None:
+def test_concurrent_updates_allow_only_one_writer(initialized_settings: ControllerSettings) -> None:
     async def exercise() -> tuple[list[AnnouncementSnapshot], list[Exception], int]:
-        database = Database(migrated_settings)
+        database = Database(initialized_settings)
         try:
             created = await database.create_daily_announcement(
                 minute_of_day=7 * 60 + 15,
@@ -305,12 +336,30 @@ def test_concurrent_updates_allow_only_one_writer(migrated_settings: ControllerS
     assert revision == 2
 
 
-def test_readiness_rejects_a_pending_migration(migrated_settings: ControllerSettings) -> None:
-    with sqlite3.connect(migrated_settings.database_path) as connection:
-        connection.execute("UPDATE alembic_version SET version_num = '0003'")
+def test_app_initializes_a_fresh_database_on_startup(
+    controller_settings: ControllerSettings,
+) -> None:
+    with TestClient(create_app(controller_settings)) as client:
+        assert client.get("/health/ready").status_code == 200
+        settings = client.get("/api/v1/settings")
+        assert settings.status_code == 200
+        assert settings.json()["announcements_enabled"] is True
+        assert client.get(API).json() == []
 
-    with TestClient(create_app(migrated_settings)) as client:
-        response = client.get("/health/ready")
 
-    assert response.status_code == 503
-    assert response.json() == {"status": "not_ready"}
+def test_readiness_rejects_a_missing_settings_row(
+    initialized_settings: ControllerSettings,
+) -> None:
+    async def exercise() -> None:
+        database = Database(initialized_settings)
+        try:
+            await database.initialize()
+            with sqlite3.connect(initialized_settings.database_path) as connection:
+                connection.execute("DELETE FROM application_settings")
+            ready, error = await database.check_ready()
+            assert not ready
+            assert error == "Application settings are not initialized"
+        finally:
+            await database.close()
+
+    asyncio.run(exercise())

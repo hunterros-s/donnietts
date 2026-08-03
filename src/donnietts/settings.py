@@ -74,3 +74,8 @@ class ControllerSettings:
     @property
     def database_url(self) -> str:
         return f"sqlite+aiosqlite:///{self.database_path}"
+
+    @property
+    def audio_dir(self) -> Path:
+        """Directory where generated announcement audio is stored."""
+        return self.database_path.parent / "audio"
