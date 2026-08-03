@@ -24,6 +24,10 @@ generates speech, prepends the chime, and plays it. Pass any template, e.g.
 
 Start the controller API:
 
+```bash
+uv run donnietts serve
+```
+
 In a third terminal, run the announcement worker, which materializes runs from the
 announcements table, generates speech before each scheduled time, and plays it:
 
