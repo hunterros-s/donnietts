@@ -18,3 +18,8 @@ def test_api_routes_take_precedence_over_static_mount(client) -> None:
     response = client.get("/api/v1/announcements")
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_vendored_web_component_assets_served(client) -> None:
+    assert client.get("/vendor/wa/styles/themes/default.css").status_code == 200
+    assert client.get("/vendor/wa/components/switch/switch.js").status_code == 200

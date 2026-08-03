@@ -166,16 +166,23 @@ model from Hugging Face, so the controller reports `warming` until it is ready.
 ## Web UI
 
 The controller serves a small single-page interface at
-<http://127.0.0.1:8000/> (no separate frontend, no build step — it is static
-files served by the FastAPI app, and only reachable from the machine itself):
+<http://127.0.0.1:8000/> (no build step — it is static files served by the
+FastAPI app, and only reachable from the machine itself):
 
 - **Status** — controller health, a pause/resume switch for announcements, the
   speech service's state (ready / warming / unavailable), and the next few
-  upcoming announcements.
+  upcoming announcements (shown in the controller's timezone).
 - **Schedule** — add, enable/disable, edit, and delete daily and one-off
   announcements; template text is validated exactly like the API's.
 - **Runs** — recent run history with status and outcome (what was spoken, or
   why a run was skipped or failed).
+
+The UI is built on [Web Awesome](https://webawesome.com/) (the actively
+maintained successor to Shoelace) using `wa-*` web components — tabs, switch,
+dialog, select, inputs, tags. The components are **vendored** under
+`src/donnietts/web/vendor/` (MIT licensed, ~2.5 MB) so the page works fully
+offline with no CDN dependency, plus a small local icon set so even the
+component glyphs (select chevron, dialog close) never hit the network.
 
 To reach it from another machine, tunnel over SSH:
 

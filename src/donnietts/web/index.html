@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DonnieTTS</title>
   <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/vendor/wa/styles/themes/default.css">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -17,114 +18,104 @@
     </div>
   </header>
 
-  <nav class="tabs" role="tablist">
-    <button class="tab active" data-tab="status" role="tab">Status</button>
-    <button class="tab" data-tab="schedule" role="tab">Schedule</button>
-    <button class="tab" data-tab="runs" role="tab">Runs</button>
-  </nav>
-
   <main>
-    <section id="tab-status" class="panel active">
-      <div class="grid">
+    <wa-tab-group id="tabs" active="status">
+      <wa-tab panel="status">Status</wa-tab>
+      <wa-tab panel="schedule">Schedule</wa-tab>
+      <wa-tab panel="runs">Runs</wa-tab>
+
+      <wa-tab-panel name="status">
+        <div class="grid">
+          <article class="card">
+            <h2>Announcements</h2>
+            <div class="toggle-row">
+              <span id="mode-label" class="big-mode">…</span>
+              <wa-switch id="mode-toggle"></wa-switch>
+            </div>
+            <p id="mode-hint" class="hint"></p>
+            <wa-button id="test-voice" variant="brand" size="s">Test voice now</wa-button>
+          </article>
+
+          <article class="card">
+            <h2>Speech service</h2>
+            <div class="status-line"><span id="speech-dot" class="dot"></span><span id="speech-status">…</span></div>
+            <dl class="kv">
+              <dt>model</dt><dd id="speech-model">—</dd>
+              <dt>voice</dt><dd id="speech-voice">—</dd>
+            </dl>
+            <p id="speech-error" class="error"></p>
+          </article>
+
+          <article class="card">
+            <h2>Controller database</h2>
+            <div class="status-line"><span id="db-dot" class="dot"></span><span id="db-status">…</span></div>
+          </article>
+        </div>
+
         <article class="card">
-          <h2>Announcements</h2>
-          <div class="toggle-row">
-            <span id="mode-label" class="big-mode">…</span>
-            <button id="mode-toggle" class="switch" role="switch" aria-checked="false"></button>
-          </div>
-          <p id="mode-hint" class="hint"></p>
-          <button id="test-voice" class="btn">Test voice now</button>
+          <h2>Next up</h2>
+          <ul id="next-list" class="next-list"></ul>
+        </article>
+      </wa-tab-panel>
+
+      <wa-tab-panel name="schedule">
+        <article class="card">
+          <h2>Add announcement</h2>
+          <form id="add-form" class="add-form">
+            <wa-select id="add-kind" label="Type">
+              <wa-option value="daily" selected>Daily</wa-option>
+              <wa-option value="one_off">One-off</wa-option>
+            </wa-select>
+            <wa-input id="add-time" label="Time" type="time" value="09:00"></wa-input>
+            <wa-input id="add-runat" label="When" type="datetime-local" hidden></wa-input>
+            <wa-input id="add-lead" label="Lead (sec)" type="number" min="0" value="300"></wa-input>
+            <wa-checkbox id="add-enabled" checked>Enabled</wa-checkbox>
+            <wa-textarea id="add-template" class="wide" label="Template" rows="3"
+              placeholder="What Donnie should say"></wa-textarea>
+            <wa-button type="submit" variant="brand" id="add-submit">Add</wa-button>
+          </form>
         </article>
 
         <article class="card">
-          <h2>Speech service</h2>
-          <div class="status-line"><span id="speech-dot" class="dot"></span><span id="speech-status">…</span></div>
-          <dl class="kv">
-            <dt>model</dt><dd id="speech-model">—</dd>
-            <dt>voice</dt><dd id="speech-voice">—</dd>
-          </dl>
-          <p id="speech-error" class="error"></p>
+          <h2>Schedule <wa-button id="refresh-schedule" variant="neutral" size="s">refresh</wa-button></h2>
+          <div id="schedule-empty" class="empty" hidden>No announcements yet.</div>
+          <table id="schedule-table" class="data-table" hidden>
+            <thead><tr><th></th><th>Time</th><th>Template</th><th>Lead</th><th>Changed</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
         </article>
+      </wa-tab-panel>
 
+      <wa-tab-panel name="runs">
         <article class="card">
-          <h2>Controller database</h2>
-          <div class="status-line"><span id="db-dot" class="dot"></span><span id="db-status">…</span></div>
+          <h2>Recent runs <wa-button id="refresh-runs" variant="neutral" size="s">refresh</wa-button></h2>
+          <div id="runs-empty" class="empty" hidden>No runs yet.</div>
+          <table id="runs-table" class="data-table" hidden>
+            <thead><tr><th>When</th><th>Announcement</th><th>Status</th><th>Outcome</th></tr></thead>
+            <tbody></tbody>
+          </table>
         </article>
-      </div>
-
-      <article class="card">
-        <h2>Next up</h2>
-        <ul id="next-list" class="next-list"></ul>
-      </article>
-    </section>
-
-    <section id="tab-schedule" class="panel">
-      <article class="card">
-        <h2>Add announcement</h2>
-        <form id="add-form" class="add-form">
-          <label>Type
-            <select id="add-kind">
-              <option value="daily">Daily</option>
-              <option value="one_off">One-off</option>
-            </select>
-          </label>
-          <label id="add-time-label">Time
-            <input id="add-time" type="time" value="09:00">
-          </label>
-          <label id="add-runat-label" hidden>When
-            <input id="add-runat" type="datetime-local">
-          </label>
-          <label>Lead (sec)
-            <input id="add-lead" type="number" min="0" value="300">
-          </label>
-          <label class="check"><input id="add-enabled" type="checkbox" checked> Enabled</label>
-          <label class="wide">Template
-            <textarea id="add-template" rows="3" placeholder="What Donnie should say"></textarea>
-          </label>
-          <button type="submit" class="btn">Add</button>
-        </form>
-      </article>
-
-      <article class="card">
-        <h2>Schedule <button id="refresh-schedule" class="btn ghost small">refresh</button></h2>
-        <div id="schedule-empty" class="empty" hidden>No announcements yet.</div>
-        <table id="schedule-table" class="data-table" hidden>
-          <thead><tr><th></th><th>Time</th><th>Template</th><th>Lead</th><th>Changed</th><th></th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </article>
-    </section>
-
-    <section id="tab-runs" class="panel">
-      <article class="card">
-        <h2>Recent runs <button id="refresh-runs" class="btn ghost small">refresh</button></h2>
-        <div id="runs-empty" class="empty" hidden>No runs yet.</div>
-        <table id="runs-table" class="data-table" hidden>
-          <thead><tr><th>When</th><th>Announcement</th><th>Status</th><th>Outcome</th></tr></thead>
-          <tbody></tbody>
-        </table>
-      </article>
-    </section>
+      </wa-tab-panel>
+    </wa-tab-group>
   </main>
 
-  <dialog id="edit-dialog">
-    <form id="edit-form" method="dialog">
-      <h2>Edit announcement</h2>
+  <wa-dialog id="edit-dialog" label="Edit announcement">
+    <form id="edit-form" class="edit-form">
       <input id="edit-id" type="hidden">
       <input id="edit-revision" type="hidden">
-      <label class="check"><input id="edit-enabled" type="checkbox"> Enabled</label>
-      <label id="edit-time-label">Time <input id="edit-time" type="time"></label>
-      <label id="edit-runat-label" hidden>When <input id="edit-runat" type="datetime-local"></label>
-      <label>Lead (sec) <input id="edit-lead" type="number" min="0"></label>
-      <label class="wide">Template <textarea id="edit-template" rows="4"></textarea></label>
+      <wa-checkbox id="edit-enabled">Enabled</wa-checkbox>
+      <wa-input id="edit-time" label="Time" type="time"></wa-input>
+      <wa-input id="edit-runat" label="When" type="datetime-local" hidden></wa-input>
+      <wa-input id="edit-lead" label="Lead (sec)" type="number" min="0"></wa-input>
+      <wa-textarea id="edit-template" class="wide" label="Template" rows="4"></wa-textarea>
       <div class="dialog-actions">
-        <button type="button" id="edit-cancel" class="btn ghost">Cancel</button>
-        <button type="submit" class="btn">Save</button>
+        <wa-button id="edit-cancel" variant="neutral" data-dialog="close">Cancel</wa-button>
+        <wa-button type="submit" variant="brand" id="edit-save">Save</wa-button>
       </div>
     </form>
-  </dialog>
+  </wa-dialog>
 
   <div id="toast" class="toast" hidden></div>
-  <script src="/app.js"></script>
+  <script type="module" src="/app.js"></script>
 </body>
 </html>

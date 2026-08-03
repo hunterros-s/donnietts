@@ -1,10 +1,46 @@
 "use strict";
 
+/* Web Awesome components (vendored — no CDN, no build step). */
+import "/vendor/wa/components/icon/icon.js";
+import "/vendor/wa/components/button/button.js";
+import "/vendor/wa/components/checkbox/checkbox.js";
+import "/vendor/wa/components/input/input.js";
+import "/vendor/wa/components/textarea/textarea.js";
+import "/vendor/wa/components/select/select.js";
+import "/vendor/wa/components/option/option.js";
+import "/vendor/wa/components/switch/switch.js";
+import "/vendor/wa/components/tag/tag.js";
+import "/vendor/wa/components/tab/tab.js";
+import "/vendor/wa/components/tab-panel/tab-panel.js";
+import "/vendor/wa/components/tab-group/tab-group.js";
+import "/vendor/wa/components/dialog/dialog.js";
+import "/vendor/wa/components/popup/popup.js";
+import "/vendor/wa/components/spinner/spinner.js";
+import { registerIconLibrary } from "/vendor/wa/components/icon/library.js";
+
+/* The library ships no icon SVGs; register a tiny local set as data URIs so
+   the select chevron, dialog close button and tab scroll arrows work offline. */
+const ICONS = {
+  "chevron-down":
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 342.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 274.7 86.6 137.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg>',
+  "chevron-left":
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><path d="M9.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l192 192c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L77.3 256 246.6 86.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-192 192z"/></svg>',
+  "chevron-right":
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><path d="M310.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-192 192c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L242.7 256 73.4 86.6c-12.5-12.5-12.5-32.8 0-45.3s-32.8-12.5-45.3 0l192 192z"/></svg>',
+  xmark:
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><path d="M342.6 150.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L192 210.7 86.6 105.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3L146.7 256 41.4 361.4c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0L192 301.3l105.4 105.3c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L237.3 256l105.3-105.4z"/></svg>',
+};
+registerIconLibrary("default", {
+  resolver: (name) => {
+    const svg = ICONS[name] || ICONS.xmark;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  },
+});
+
 const $ = (id) => document.getElementById(id);
 
 let settings = { announcements_enabled: false, mode: "paused", timezone: "UTC" };
 let announcements = [];
-let runs = [];
 let currentTab = "status";
 const POLL_MS = 5000;
 let toastTimer = null;
@@ -45,6 +81,36 @@ function toast(message, kind = "ok") {
 
 /* ---------- time helpers (controller timezone) ---------- */
 
+// The timezone offset (ms) of `tz` at the instant whose UTC fields are the
+// "wall clock" encoded by wallAsUtcMs (Date.UTC(y, mo-1, d, h, mi, s)).
+function tzOffsetMs(tz, wallAsUtcMs) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(new Date(wallAsUtcMs));
+  const map = {};
+  for (const p of parts) if (p.type !== "literal") map[p.type] = p.value;
+  const tzAsUtcMs = Date.UTC(+map.year, +map.month - 1, +map.day, +map.hour, +map.minute, +map.second);
+  return tzAsUtcMs - wallAsUtcMs;
+}
+
+// Absolute instant whose wall-clock time in `tz` is (y, mo, d, h, mi, s) — 1-based month.
+function wallToInstant(tz, y, mo, d, h, mi, s) {
+  const wall = Date.UTC(y, mo - 1, d, h, mi, s);
+  return wall - tzOffsetMs(tz, wall);
+}
+
+// Today's date components in `tz` (1-based month).
+function todayInTz(tz) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const map = {};
+  for (const p of parts) if (p.type !== "literal") map[p.type] = p.value;
+  return { y: +map.year, mo: +map.month, d: +map.day };
+}
+
 function fmtDate(iso, tz) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "—";
@@ -60,24 +126,6 @@ function fmtFull(iso, tz) {
     timeZone: tz, year: "numeric", month: "short", day: "numeric",
     hour: "numeric", minute: "2-digit", second: "2-digit",
   }).format(date);
-}
-
-// Returns a Date whose UTC fields equal the wall-clock time in tz.
-function wallClock(tz) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz, hourCycle: "h23",
-    year: "numeric", month: "2-digit", day: "2-digit",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  }).formatToParts(new Date());
-  const map = {};
-  for (const p of parts) if (p.type !== "literal") map[p.type] = p.value;
-  return new Date(Date.UTC(+map.year, +map.month - 1, +map.day, +map.hour, +map.minute, +map.second));
-}
-
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text == null ? "" : String(text);
-  return div.innerHTML;
 }
 
 function snippet(text, max = 80) {
@@ -119,7 +167,7 @@ async function refreshStatus() {
 function renderMode() {
   const toggle = $("mode-toggle");
   const active = !!settings.announcements_enabled;
-  toggle.setAttribute("aria-checked", String(active));
+  if (toggle.checked !== active) toggle.checked = active;
   $("mode-label").textContent = active ? "Announcements active" : "Announcements paused";
   $("mode-hint").textContent = active
     ? "The worker is speaking scheduled announcements."
@@ -157,20 +205,20 @@ function renderDatabase(database) {
 function nextOccurrences() {
   if (!announcements.length) return [];
   const tz = settings.timezone;
-  const now = wallClock(tz);
-  const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const now = Date.now();
+  const { y, mo, d } = todayInTz(tz);
+  const midnight = wallToInstant(tz, y, mo, d, 0, 0, 0);
   const upcoming = [];
   for (const a of announcements) {
     if (!a.enabled) continue;
     if (a.kind === "daily" && a.time) {
       const [h, m] = a.time.split(":").map(Number);
-      const minute = h * 60 + m;
-      const when = today + (minute > nowMinutes ? minute : minute + 24 * 60) * 60000;
+      let when = midnight + (h * 60 + m) * 60000;
+      if (when <= now) when += 24 * 3600000;
       upcoming.push({ a, when });
     } else if (a.kind === "one_off" && a.run_at_utc) {
       const when = new Date(a.run_at_utc).getTime();
-      if (when > now.getTime()) upcoming.push({ a, when });
+      if (when > now) upcoming.push({ a, when });
     }
   }
   upcoming.sort((x, y) => x.when - y.when);
@@ -185,16 +233,15 @@ function renderNextUp() {
     return;
   }
   const tz = settings.timezone;
-  const now = wallClock(tz).getTime();
+  const now = Date.now();
   list.innerHTML = "";
   for (const { a, when } of upcoming) {
     const li = document.createElement("li");
     const t = document.createElement("span");
     t.className = "next-time";
-    const date = new Date(when);
     t.textContent = new Intl.DateTimeFormat("en-US", {
       timeZone: tz, hour: "numeric", minute: "2-digit",
-    }).format(date);
+    }).format(new Date(when));
     const span = document.createElement("span");
     span.className = "next-text";
     span.textContent = a.kind === "one_off" ? `[one-off] ${snippet(a.template, 60)}` : snippet(a.template, 60);
@@ -208,6 +255,35 @@ function renderNextUp() {
 }
 
 /* ---------- schedule ---------- */
+
+const RUN_STATUS_VARIANTS = {
+  completed: "success",
+  spoken: "success",
+  failed: "danger",
+  interrupted: "danger",
+  planned: "brand",
+  ready: "brand",
+  playing: "brand",
+  skipped: "warning",
+  cancelled: "warning",
+};
+
+function tagFor(text, variant) {
+  const tag = document.createElement("wa-tag");
+  tag.variant = variant || "neutral";
+  tag.size = "s";
+  tag.textContent = text;
+  return tag;
+}
+
+function smallButton(label, variant, onClick) {
+  const button = document.createElement("wa-button");
+  button.variant = variant || "neutral";
+  button.size = "s";
+  button.textContent = label;
+  button.addEventListener("click", onClick);
+  return button;
+}
 
 async function loadSchedule() {
   try {
@@ -229,10 +305,7 @@ async function loadSchedule() {
     const tr = document.createElement("tr");
 
     const tdEnabled = document.createElement("td");
-    const badge = document.createElement("span");
-    badge.className = `badge ${a.enabled ? "enabled" : "disabled"}`;
-    badge.textContent = a.enabled ? "enabled" : "disabled";
-    tdEnabled.appendChild(badge);
+    tdEnabled.appendChild(tagFor(a.enabled ? "enabled" : "disabled", a.enabled ? "success" : "neutral"));
 
     const tdTime = document.createElement("td");
     tdTime.className = "mono";
@@ -254,19 +327,9 @@ async function loadSchedule() {
     const tdActions = document.createElement("td");
     const actions = document.createElement("div");
     actions.className = "row-actions";
-    const toggleBtn = document.createElement("button");
-    toggleBtn.className = "btn ghost small";
-    toggleBtn.textContent = a.enabled ? "disable" : "enable";
-    toggleBtn.onclick = () => patchAnnouncement(a, { enabled: !a.enabled });
-    const editBtn = document.createElement("button");
-    editBtn.className = "btn ghost small";
-    editBtn.textContent = "edit";
-    editBtn.onclick = () => openEditDialog(a);
-    const delBtn = document.createElement("button");
-    delBtn.className = "btn danger small";
-    delBtn.textContent = "delete";
-    delBtn.onclick = () => deleteAnnouncement(a);
-    actions.append(toggleBtn, editBtn, delBtn);
+    actions.appendChild(smallButton(a.enabled ? "disable" : "enable", "neutral", () => patchAnnouncement(a, { enabled: !a.enabled })));
+    actions.appendChild(smallButton("edit", "neutral", () => openEditDialog(a)));
+    actions.appendChild(smallButton("delete", "danger", () => deleteAnnouncement(a)));
     tdActions.appendChild(actions);
 
     tr.append(tdEnabled, tdTime, tdTemplate, tdLead, tdChanged, tdActions);
@@ -311,8 +374,8 @@ async function deleteAnnouncement(a) {
 
 $("add-kind").addEventListener("change", () => {
   const oneOff = $("add-kind").value === "one_off";
-  $("add-time-label").hidden = oneOff;
-  $("add-runat-label").hidden = !oneOff;
+  $("add-time").hidden = oneOff;
+  $("add-runat").hidden = !oneOff;
   if (oneOff && !$("add-runat").value) {
     const d = new Date(Date.now() + 3600000);
     d.setMinutes(0, 0, 0);
@@ -322,7 +385,7 @@ $("add-kind").addEventListener("change", () => {
 
 $("add-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const submit = event.target.querySelector('button[type="submit"]');
+  const submit = $("add-submit");
   submit.disabled = true;
   const kind = $("add-kind").value;
   const payload = {
@@ -341,6 +404,7 @@ $("add-form").addEventListener("submit", async (event) => {
     toast("Announcement added.");
     event.target.reset();
     $("add-template").value = "";
+    $("add-time").value = "09:00";
     await loadSchedule();
     if (currentTab === "status") renderNextUp();
   } catch (error) {
@@ -358,25 +422,23 @@ function openEditDialog(a) {
   $("edit-lead").value = a.lead_seconds;
   $("edit-template").value = a.template;
   const oneOff = a.kind === "one_off";
-  $("edit-time-label").hidden = oneOff;
-  $("edit-runat-label").hidden = !oneOff;
+  $("edit-time").hidden = oneOff;
+  $("edit-runat").hidden = !oneOff;
   if (oneOff) {
     const d = new Date(a.run_at_utc);
     $("edit-runat").value = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   } else {
     $("edit-time").value = a.time || "09:00";
   }
-  dialog.showModal();
+  dialog.open = true;
 }
-
-$("edit-cancel").addEventListener("click", () => $("edit-dialog").close());
 
 $("edit-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const dialog = $("edit-dialog");
   const id = Number($("edit-id").value);
   const revision = Number($("edit-revision").value);
-  const oneOff = $("edit-time-label").hidden;
+  const oneOff = $("edit-time").hidden;
   const changes = { enabled: $("edit-enabled").checked, lead_seconds: Number($("edit-lead").value) || 0 };
   if (oneOff) {
     changes.run_at = new Date($("edit-runat").value).toISOString();
@@ -385,7 +447,7 @@ $("edit-form").addEventListener("submit", async (event) => {
   }
   const template = $("edit-template").value.trim();
   if (template) changes.template = template;
-  dialog.close();
+  dialog.open = false;
   const a = announcements.find((x) => x.id === id);
   await patchAnnouncement(a || { id, revision }, changes);
 });
@@ -393,6 +455,7 @@ $("edit-form").addEventListener("submit", async (event) => {
 /* ---------- runs ---------- */
 
 async function loadRuns() {
+  let runs;
   try {
     runs = await api("/api/v1/runs");
   } catch (error) {
@@ -420,10 +483,7 @@ async function loadRuns() {
       : `#${r.announcement_id ?? "—"} one-off`;
 
     const tdStatus = document.createElement("td");
-    const badge = document.createElement("span");
-    badge.className = `badge status-${r.status}`;
-    badge.textContent = r.status;
-    tdStatus.appendChild(badge);
+    tdStatus.appendChild(tagFor(r.status, RUN_STATUS_VARIANTS[r.status] || "neutral"));
 
     const tdOutcome = document.createElement("td");
     tdOutcome.className = "snippet";
@@ -441,8 +501,8 @@ async function loadRuns() {
 /* ---------- actions ---------- */
 
 async function toggleMode() {
-  const target = !settings.announcements_enabled;
   const toggle = $("mode-toggle");
+  const target = toggle.checked;
   toggle.disabled = true;
   try {
     await api("/api/v1/settings", { method: "PATCH", body: { announcements_enabled: target } });
@@ -452,6 +512,7 @@ async function toggleMode() {
     toast(target ? "Announcements resumed." : "Announcements paused.");
   } catch (error) {
     toast(`Could not change mode: ${error.message}`, "err");
+    renderMode(); // revert the switch to the server's state
   } finally {
     toggle.disabled = false;
   }
@@ -481,24 +542,18 @@ async function testVoice() {
   }
 }
 
-$("mode-toggle").addEventListener("click", toggleMode);
+$("mode-toggle").addEventListener("change", toggleMode);
 $("test-voice").addEventListener("click", testVoice);
 $("refresh-schedule").addEventListener("click", loadSchedule);
 $("refresh-runs").addEventListener("click", loadRuns);
 
 /* ---------- tabs ---------- */
 
-document.querySelectorAll(".tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    document.querySelectorAll(".panel").forEach((p) => p.classList.remove("active"));
-    tab.classList.add("active");
-    currentTab = tab.dataset.tab;
-    $(`tab-${currentTab}`).classList.add("active");
-    if (currentTab === "schedule") loadSchedule();
-    if (currentTab === "runs") loadRuns();
-    if (currentTab === "status") { renderNextUp(); }
-  });
+$("tabs").addEventListener("wa-tab-show", (event) => {
+  currentTab = event.detail.name;
+  if (currentTab === "schedule") loadSchedule();
+  if (currentTab === "runs") loadRuns();
+  if (currentTab === "status") renderNextUp();
 });
 
 /* ---------- boot ---------- */
