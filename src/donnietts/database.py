@@ -1,6 +1,7 @@
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, event, select, update
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -9,6 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 from donnietts.announcement_runs import AnnouncementRunRepository, CANCELLABLE_STATUSES
 from donnietts.models import Announcement, AnnouncementRun, ApplicationSettings, Base
 from donnietts.settings import ControllerSettings
+
+if TYPE_CHECKING:
+    from donnietts.schedule import Schedule, ScheduleAnnouncement
 
 
 logger = logging.getLogger(__name__)
@@ -140,6 +144,75 @@ class Database:
             row.updated_at = datetime.now(UTC)
             await session.flush()
             return self._settings_snapshot(row)
+
+    async def sync_schedule(self, schedule: "Schedule") -> list[AnnouncementSnapshot]:
+        """Make the announcement projection match a validated YAML schedule.
+
+        SQLite remains responsible for durable runs and operational settings;
+        the rows in ``announcements`` are only a projection of the YAML file.
+        Pending runs for a changed announcement are discarded so the worker can
+        materialize them again with the new template and lead time.
+        """
+        async with self.sessions.begin() as session:
+            settings = await session.get(ApplicationSettings, 1)
+            if settings is None:
+                raise RuntimeError("Application settings have not been initialized")
+            if settings.timezone != schedule.timezone:
+                settings.timezone = schedule.timezone
+                settings.updated_at = datetime.now(UTC)
+
+            rows = list(await session.scalars(select(Announcement)))
+            existing = {self._announcement_identity(row): row for row in rows}
+            projected: list[Announcement] = []
+            now = datetime.now(UTC)
+
+            for configured in schedule.announcements:
+                row = existing.pop(configured.identity, None)
+                if row is None:
+                    row = Announcement(
+                        kind=configured.kind,
+                        enabled=configured.enabled,
+                        minute_of_day=configured.minute_of_day,
+                        run_at_utc=configured.run_at_utc,
+                        template=configured.template,
+                        lead_seconds=configured.lead_seconds,
+                        revision=1,
+                    )
+                    session.add(row)
+                elif self._announcement_changed(row, configured):
+                    await session.execute(
+                        delete(AnnouncementRun).where(
+                            AnnouncementRun.announcement_id == row.id,
+                            AnnouncementRun.status.in_(CANCELLABLE_STATUSES),
+                        )
+                    )
+                    row.enabled = configured.enabled
+                    row.minute_of_day = configured.minute_of_day
+                    row.run_at_utc = configured.run_at_utc
+                    row.template = configured.template
+                    row.lead_seconds = configured.lead_seconds
+                    row.revision += 1
+                    row.updated_at = now
+                projected.append(row)
+
+            for row in existing.values():
+                await session.execute(
+                    update(AnnouncementRun)
+                    .where(
+                        AnnouncementRun.announcement_id == row.id,
+                        AnnouncementRun.status.in_(CANCELLABLE_STATUSES),
+                    )
+                    .values(
+                        status="cancelled",
+                        outcome_reason="announcement removed from schedule",
+                        updated_at=now,
+                        finished_at=now,
+                    )
+                )
+                await session.delete(row)
+
+            await session.flush()
+            return [self._announcement_snapshot(row) for row in projected]
 
     async def list_announcements(self) -> list[AnnouncementSnapshot]:
         async with self.sessions() as session:
@@ -334,6 +407,30 @@ class Database:
     @staticmethod
     def _is_duplicate_daily_time(error: IntegrityError) -> bool:
         return "announcements.minute_of_day" in str(error.orig)
+
+    @classmethod
+    def _announcement_identity(cls, row: Announcement) -> tuple[str, int | datetime]:
+        if row.kind == "daily":
+            assert row.minute_of_day is not None
+            return row.kind, row.minute_of_day
+        assert row.run_at_utc is not None
+        return row.kind, cls._as_utc(row.run_at_utc)
+
+    @classmethod
+    def _announcement_changed(
+        cls,
+        row: Announcement,
+        configured: "ScheduleAnnouncement",
+    ) -> bool:
+        run_at = cls._as_utc(row.run_at_utc) if row.run_at_utc is not None else None
+        return (
+            row.kind != configured.kind
+            or row.enabled != configured.enabled
+            or row.minute_of_day != configured.minute_of_day
+            or run_at != configured.run_at_utc
+            or row.template != configured.template
+            or row.lead_seconds != configured.lead_seconds
+        )
 
     @staticmethod
     def _settings_snapshot(row: ApplicationSettings) -> ApplicationSettingsSnapshot:

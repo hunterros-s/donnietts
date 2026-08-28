@@ -9,20 +9,17 @@ from donnietts.settings import ControllerSettings
 def test_schedule_text_lists_announcements(
     initialized_settings: ControllerSettings,
 ) -> None:
-    async def seed() -> None:
-        database = Database(initialized_settings)
-        try:
-            await database.update_application_settings(timezone="UTC")
-            await database.create_daily_announcement(
-                minute_of_day=8 * 60,
-                template="Good morning. It is {time}.",
-                enabled=True,
-                lead_seconds=300,
-            )
-        finally:
-            await database.close()
-
-    asyncio.run(seed())
+    initialized_settings.resolved_schedule_path.write_text(
+        """version: 1
+timezone: UTC
+defaults:
+  lead_seconds: 300
+announcements:
+  - time: "08:00"
+    template: Good morning. It is {time}.
+""",
+        encoding="utf-8",
+    )
     text = asyncio.run(schedule_text(initialized_settings))
 
     assert "Announcements are active" in text
@@ -63,6 +60,9 @@ def test_pause_and_resume_toggle_announcement_mode(
     from donnietts.settings import ControllerSettings
 
     monkeypatch.setenv("DONNIETTS_DB_PATH", str(tmp_path / "controller.sqlite3"))
+    schedule_path = tmp_path / "schedule.yaml"
+    schedule_path.write_text("announcements: []\n", encoding="utf-8")
+    monkeypatch.setenv("DONNIETTS_SCHEDULE_PATH", str(schedule_path))
     settings = ControllerSettings.from_environment()
 
     assert "paused" in cli.set_announcements_enabled(False)

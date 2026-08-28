@@ -1,3 +1,6 @@
+version: 1
+timezone: America/Detroit
+
 defaults:
   lead_minutes: 5
 

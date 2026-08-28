@@ -1,22 +1,37 @@
 import asyncio
-import sqlite3
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
 
 from donnietts.app import create_app
-from donnietts.database import (
-    AnnouncementRevisionConflictError,
-    AnnouncementSnapshot,
-    Database,
-)
+from donnietts.database import Database
+from donnietts.schedule import ScheduleError, parse_schedule
 from donnietts.settings import ControllerSettings
 
 
-API = "/api/v1/announcements"
-FUTURE_TIME = "2100-01-01T14:30:00-05:00"
-LATER_FUTURE_TIME = "2100-01-02T14:30:00-05:00"
+SCHEDULE_API = "/api/v1/schedule"
+
+
+def schedule_text(*announcements: str, timezone: str = "UTC") -> str:
+    items = "\n".join(announcements)
+    return f"""version: 1
+timezone: {timezone}
+defaults:
+  lead_seconds: 300
+announcements:
+{items if items else '  []'}
+"""
+
+
+def put_schedule(client: TestClient, text: str, etag: str | None = None):
+    if etag is None:
+        etag = client.get(SCHEDULE_API).headers["etag"]
+    return client.put(
+        SCHEDULE_API,
+        content=text,
+        headers={"Content-Type": "application/yaml", "If-Match": etag},
+    )
 
 
 def test_runs_endpoint_reports_durable_runs(
@@ -41,325 +56,188 @@ def test_runs_endpoint_reports_durable_runs(
             await database.close()
 
     asyncio.run(seed())
-
-    response = client.get("/api/v1/runs")
-    assert response.status_code == 200
-    runs = response.json()
+    runs = client.get("/api/v1/runs").json()
     assert len(runs) == 1
     assert runs[0]["status"] == "planned"
     assert runs[0]["template_snapshot"] == "It is {time}."
-    assert runs[0]["scheduled_for_utc"].startswith("2100-01-02T15:00:00")
 
 
-def test_runs_endpoint_is_empty_before_any_run_is_materialized(client: TestClient) -> None:
-    response = client.get("/api/v1/runs")
-    assert response.status_code == 200
-    assert response.json() == []
-
-
-def test_migration_creates_an_empty_announcement_set(client: TestClient) -> None:
-    response = client.get(API)
-
-    assert response.status_code == 200
-    assert response.json() == []
-
-    settings = client.get("/api/v1/settings")
-    assert settings.status_code == 200
-    assert settings.json()["timezone"] == "America/Detroit"
-    assert client.get("/health/ready").status_code == 200
-
-
-def test_daily_announcement_lifecycle(client: TestClient) -> None:
-    created = client.post(
-        f"{API}/daily",
-        json={
-            "time": "07:30",
-            "template": "  Good morning {weekday}.  ",
-            "lead_seconds": 120,
-        },
-    )
-
-    assert created.status_code == 201
-    announcement = created.json()
-    announcement_id = announcement["id"]
-    assert announcement["kind"] == "daily"
-    assert announcement["enabled"] is True
-    assert announcement["time"] == "07:30"
-    assert announcement["run_at_utc"] is None
-    assert announcement["template"] == "Good morning {weekday}."
-    assert announcement["lead_seconds"] == 120
-    assert announcement["revision"] == 1
-    assert client.get(f"{API}/{announcement_id}").json() == announcement
-
-    updated = client.patch(
-        f"{API}/{announcement_id}",
-        json={
-            "expected_revision": 1,
-            "time": "07:45",
-            "template": "Updated at {time}.",
-            "enabled": False,
-            "lead_seconds": 60,
-        },
-    )
-
-    assert updated.status_code == 200
-    assert updated.json()["revision"] == 2
-    assert updated.json()["time"] == "07:45"
-    assert updated.json()["template"] == "Updated at {time}."
-    assert updated.json()["enabled"] is False
-    assert updated.json()["lead_seconds"] == 60
-
-    stale_update = client.patch(
-        f"{API}/{announcement_id}",
-        json={"expected_revision": 1, "enabled": True},
-    )
-    assert stale_update.status_code == 409
-
-    stale_delete = client.delete(f"{API}/{announcement_id}?expected_revision=1")
-    assert stale_delete.status_code == 409
-    assert client.delete(f"{API}/{announcement_id}?expected_revision=2").status_code == 204
-    assert client.get(f"{API}/{announcement_id}").status_code == 404
-
-
-def test_daily_times_are_unique_on_create_and_update(client: TestClient) -> None:
-    first = client.post(f"{API}/daily", json={"time": "07:30", "template": "First"})
-    second = client.post(f"{API}/daily", json={"time": "07:31", "template": "Second"})
-    assert first.status_code == 201
-    assert second.status_code == 201
-
-    duplicate_create = client.post(
-        f"{API}/daily",
-        json={"time": "07:30", "template": "Duplicate"},
-    )
-    assert duplicate_create.status_code == 409
-
-    second_id = second.json()["id"]
-    duplicate_update = client.patch(
-        f"{API}/{second_id}",
-        json={"expected_revision": 1, "time": "07:30"},
-    )
-    assert duplicate_update.status_code == 409
-    unchanged = client.get(f"{API}/{second_id}").json()
-    assert unchanged["time"] == "07:31"
-    assert unchanged["revision"] == 1
-
-
-@pytest.mark.parametrize(
-    "value",
-    ["7:30", "07:3", "24:00", "23:60", "07.30", "００:００", ""],
-)
-def test_daily_time_requires_strict_ascii_hhmm(client: TestClient, value: str) -> None:
-    response = client.post(
-        f"{API}/daily",
-        json={"time": value, "template": "Invalid time"},
-    )
-
-    assert response.status_code == 422
-
-
-@pytest.mark.parametrize(
-    "template",
-    [
-        "",
-        "   ",
-        "Hello {person}.",
-        "Hello {time",
-        "Hello {}.",
-        "Hello {time!r}.",
-        "Hello {time:>20}.",
-        "Hello {time.__class__}.",
-    ],
-)
-def test_invalid_templates_are_rejected(client: TestClient, template: str) -> None:
-    response = client.post(
-        f"{API}/daily",
-        json={"time": "07:30", "template": template},
-    )
-
-    assert response.status_code == 422
-
-
-def test_all_supported_template_fields_are_accepted(client: TestClient) -> None:
-    fields = [
-        "time",
-        "weekday",
-        "date",
-        "location",
-        "city",
-        "state",
-        "latitude",
-        "longitude",
-        "weather_condition",
-        "current_temp",
-        "high_temp",
-        "low_temp",
-        "wind",
-        "wind_speed",
-        "precip_chance",
-    ]
-    template = " ".join(f"{{{field}}}" for field in fields)
-
-    response = client.post(
-        f"{API}/daily",
-        json={"time": "07:30", "template": template},
-    )
-
-    assert response.status_code == 201
-    assert response.json()["template"] == template
-
-
-def test_one_off_lifecycle_normalizes_timestamps_to_utc(client: TestClient) -> None:
-    created = client.post(
-        f"{API}/one-off",
-        json={"run_at": FUTURE_TIME, "template": "Appointment at {time}."},
-    )
-
-    assert created.status_code == 201
-    announcement = created.json()
-    assert announcement["kind"] == "one_off"
-    assert announcement["time"] is None
-    assert announcement["run_at_utc"] == "2100-01-01T19:30:00Z"
-    assert announcement["revision"] == 1
-
-    updated = client.patch(
-        f"{API}/{announcement['id']}",
-        json={
-            "expected_revision": 1,
-            "run_at": LATER_FUTURE_TIME,
-            "lead_seconds": 60,
-        },
-    )
-    assert updated.status_code == 200
-    assert updated.json()["run_at_utc"] == "2100-01-02T19:30:00Z"
-    assert updated.json()["lead_seconds"] == 60
-    assert updated.json()["revision"] == 2
-
-
-def test_multiple_one_offs_may_share_a_timestamp(client: TestClient) -> None:
-    payload = {"run_at": FUTURE_TIME, "template": "One-off"}
-
-    assert client.post(f"{API}/one-off", json=payload).status_code == 201
-    assert client.post(f"{API}/one-off", json=payload).status_code == 201
-
-
-@pytest.mark.parametrize(
-    "run_at",
-    ["2100-01-01T14:30:00", "2000-01-01T14:30:00Z", 4102486200],
-)
-def test_one_off_requires_a_future_rfc3339_timestamp_with_offset(
+def test_schedule_endpoint_returns_exact_yaml_and_path(
     client: TestClient,
-    run_at: str | int,
-) -> None:
-    response = client.post(
-        f"{API}/one-off",
-        json={"run_at": run_at, "template": "Invalid timestamp"},
-    )
-
-    assert response.status_code == 422
-
-
-def test_schedule_fields_cannot_cross_announcement_kinds(client: TestClient) -> None:
-    daily = client.post(f"{API}/daily", json={"time": "07:30", "template": "Daily"}).json()
-    one_off = client.post(
-        f"{API}/one-off",
-        json={"run_at": FUTURE_TIME, "template": "One-off"},
-    ).json()
-
-    daily_response = client.patch(
-        f"{API}/{daily['id']}",
-        json={"expected_revision": 1, "run_at": LATER_FUTURE_TIME},
-    )
-    one_off_response = client.patch(
-        f"{API}/{one_off['id']}",
-        json={"expected_revision": 1, "time": "07:45"},
-    )
-
-    assert daily_response.status_code == 422
-    assert one_off_response.status_code == 422
-
-
-@pytest.mark.parametrize(
-    "patch",
-    [
-        {"expected_revision": 1},
-        {"expected_revision": 1, "enabled": None},
-        {"expected_revision": 1, "time": None},
-        {"expected_revision": 1, "run_at": None},
-        {"expected_revision": 1, "template": None},
-        {"expected_revision": 1, "lead_seconds": None},
-        {"expected_revision": 1, "lead_seconds": -1},
-        {"expected_revision": 0, "enabled": False},
-        {"expected_revision": 1, "unknown": True},
-    ],
-)
-def test_invalid_patches_are_rejected(client: TestClient, patch: dict) -> None:
-    response = client.patch(f"{API}/1", json=patch)
-
-    assert response.status_code == 422
-
-
-def test_concurrent_updates_allow_only_one_writer(initialized_settings: ControllerSettings) -> None:
-    async def exercise() -> tuple[list[AnnouncementSnapshot], list[Exception], int]:
-        database = Database(initialized_settings)
-        try:
-            created = await database.create_daily_announcement(
-                minute_of_day=7 * 60 + 15,
-                template="Race test",
-                enabled=True,
-                lead_seconds=300,
-            )
-            results = await asyncio.gather(
-                database.update_announcement(
-                    created.id,
-                    expected_revision=1,
-                    template="First writer",
-                ),
-                database.update_announcement(
-                    created.id,
-                    expected_revision=1,
-                    template="Second writer",
-                ),
-                return_exceptions=True,
-            )
-            successes = [item for item in results if isinstance(item, AnnouncementSnapshot)]
-            errors = [item for item in results if isinstance(item, Exception)]
-            current = await database.get_announcement(created.id)
-            return successes, errors, current.revision
-        finally:
-            await database.close()
-
-    successes, errors, revision = asyncio.run(exercise())
-
-    assert len(successes) == 1
-    assert len(errors) == 1
-    assert isinstance(errors[0], AnnouncementRevisionConflictError)
-    assert revision == 2
-
-
-def test_app_initializes_a_fresh_database_on_startup(
     controller_settings: ControllerSettings,
 ) -> None:
+    expected = controller_settings.resolved_schedule_path.read_text()
+    response = client.get(SCHEDULE_API)
+
+    assert response.status_code == 200
+    assert response.text == expected
+    assert response.headers["content-type"].startswith("application/yaml")
+    assert response.headers["etag"].startswith('"')
+    assert response.headers["x-schedule-path"] == str(controller_settings.resolved_schedule_path)
+
+
+def test_put_schedule_preserves_text_and_projects_announcements(client: TestClient) -> None:
+    text = schedule_text(
+        """  - time: "07:30"
+    template: >-
+      Good morning {weekday}.
+    lead_seconds: 120""",
+        """  - run_at: "2100-01-01T14:30:00-05:00"
+    template: Appointment at {time}.
+    enabled: false""",
+        timezone="America/Detroit",
+    ) + "# keep this comment\n"
+
+    response = put_schedule(client, text)
+    assert response.status_code == 200
+    assert response.text == text
+    assert client.get(SCHEDULE_API).text == text
+
+    announcements = client.get("/api/v1/announcements").json()
+    assert len(announcements) == 2
+    daily = next(item for item in announcements if item["kind"] == "daily")
+    one_off = next(item for item in announcements if item["kind"] == "one_off")
+    assert daily["time"] == "07:30"
+    assert daily["template"] == "Good morning {weekday}."
+    assert daily["lead_seconds"] == 120
+    assert one_off["run_at_utc"] == "2100-01-01T19:30:00Z"
+    assert one_off["enabled"] is False
+    assert client.get("/api/v1/settings").json()["timezone"] == "America/Detroit"
+
+
+def test_existing_lead_minutes_format_is_supported(client: TestClient) -> None:
+    text = """defaults:
+  lead_minutes: 5
+announcements:
+  - time: "08:00"
+    template: Morning.
+  - time: "09:00"
+    lead_minutes: 2
+    template: Update.
+"""
+    assert put_schedule(client, text).status_code == 200
+    announcements = client.get("/api/v1/announcements").json()
+    assert [item["lead_seconds"] for item in announcements] == [300, 120]
+
+
+def test_schedule_save_uses_etag_to_prevent_overwrite(
+    client: TestClient,
+    controller_settings: ControllerSettings,
+) -> None:
+    stale_etag = client.get(SCHEDULE_API).headers["etag"]
+    controller_settings.resolved_schedule_path.write_text(
+        schedule_text("  - time: \"08:00\"\n    template: External edit."),
+        encoding="utf-8",
+    )
+
+    response = put_schedule(client, schedule_text(), stale_etag)
+    assert response.status_code == 409
+    assert "reload" in response.json()["detail"]
+    assert "External edit" in client.get(SCHEDULE_API).text
+
+
+@pytest.mark.parametrize(
+    ("fragment", "message"),
+    [
+        ('time: "7:30"\n    template: Invalid.', "HH:MM"),
+        ('time: "24:00"\n    template: Invalid.', "HH:MM"),
+        ('time: "08:00"\n    run_at: "2100-01-01T00:00:00Z"\n    template: Invalid.', "exactly one"),
+        ('run_at: "2100-01-01T00:00:00"\n    template: Invalid.', "UTC offset"),
+        ('time: "08:00"\n    template: Hello {person}.', "unknown template field"),
+        ('time: "08:00"\n    template: ""', "must not be empty"),
+        ('time: "08:00"\n    template: Invalid.\n    unknown: true', "Extra inputs"),
+    ],
+)
+def test_invalid_schedules_are_rejected_without_changing_the_file(
+    client: TestClient,
+    fragment: str,
+    message: str,
+) -> None:
+    before = client.get(SCHEDULE_API)
+    invalid = f"announcements:\n  - {fragment}\n"
+    response = put_schedule(client, invalid, before.headers["etag"])
+
+    assert response.status_code == 422
+    assert message.lower() in response.json()["detail"].lower()
+    assert client.get(SCHEDULE_API).text == before.text
+
+
+def test_yaml_syntax_error_reports_line_and_column(client: TestClient) -> None:
+    response = put_schedule(client, "announcements:\n  - time: [\n")
+    assert response.status_code == 422
+    assert "line" in response.json()["detail"]
+    assert "column" in response.json()["detail"]
+
+
+def test_duplicate_daily_and_one_off_times_are_rejected() -> None:
+    with pytest.raises(ScheduleError, match="duplicated"):
+        parse_schedule(
+            schedule_text(
+                '  - time: "08:00"\n    template: First.',
+                '  - time: "08:00"\n    template: Second.',
+            )
+        )
+    with pytest.raises(ScheduleError, match="duplicated"):
+        parse_schedule(
+            schedule_text(
+                '  - run_at: "2100-01-01T00:00:00Z"\n    template: First.',
+                '  - run_at: "2100-01-01T00:00:00+00:00"\n    template: Second.',
+            )
+        )
+
+
+def test_schedule_reconciliation_updates_and_removes_rows(client: TestClient) -> None:
+    first = schedule_text(
+        '  - time: "08:00"\n    template: First.',
+        '  - time: "09:00"\n    template: Remove me.',
+    )
+    assert put_schedule(client, first).status_code == 200
+    original = client.get("/api/v1/announcements").json()
+    eight_id = next(item["id"] for item in original if item["time"] == "08:00")
+
+    second = schedule_text('  - time: "08:00"\n    template: Updated.')
+    assert put_schedule(client, second).status_code == 200
+    current = client.get("/api/v1/announcements").json()
+    assert len(current) == 1
+    assert current[0]["id"] == eight_id
+    assert current[0]["revision"] == 2
+    assert current[0]["template"] == "Updated."
+
+
+def test_invalid_external_edit_degrades_status_but_keeps_last_projection(
+    client: TestClient,
+    controller_settings: ControllerSettings,
+) -> None:
+    assert put_schedule(
+        client,
+        schedule_text('  - time: "08:00"\n    template: Valid.'),
+    ).status_code == 200
+    controller_settings.resolved_schedule_path.write_text("announcements: [", encoding="utf-8")
+
+    status = client.get("/api/v1/status").json()
+    assert status["status"] == "degraded"
+    assert status["schedule"]["status"] == "invalid"
+    assert len(client.get("/api/v1/announcements").json()) == 1
+    assert client.get("/health/ready").status_code == 503
+
+
+def test_announcement_mutation_routes_are_disabled(client: TestClient) -> None:
+    assert client.post("/api/v1/announcements/daily", json={}).status_code == 405
+    assert client.patch("/api/v1/announcements/1", json={}).status_code == 405
+    assert client.delete("/api/v1/announcements/1").status_code == 405
+
+
+def test_pause_setting_remains_operational_state(client: TestClient) -> None:
+    assert client.patch(
+        "/api/v1/settings", json={"announcements_enabled": False}
+    ).json()["mode"] == "paused"
+    assert client.patch(
+        "/api/v1/settings", json={"timezone": "UTC"}
+    ).status_code == 422
+
+
+def test_app_initializes_a_fresh_database(controller_settings: ControllerSettings) -> None:
     with TestClient(create_app(controller_settings)) as client:
         assert client.get("/health/ready").status_code == 200
-        settings = client.get("/api/v1/settings")
-        assert settings.status_code == 200
-        assert settings.json()["announcements_enabled"] is True
-        assert client.get(API).json() == []
-
-
-def test_readiness_rejects_a_missing_settings_row(
-    initialized_settings: ControllerSettings,
-) -> None:
-    async def exercise() -> None:
-        database = Database(initialized_settings)
-        try:
-            await database.initialize()
-            with sqlite3.connect(initialized_settings.database_path) as connection:
-                connection.execute("DELETE FROM application_settings")
-            ready, error = await database.check_ready()
-            assert not ready
-            assert error == "Application settings are not initialized"
-        finally:
-            await database.close()
-
-    asyncio.run(exercise())
+        assert client.get("/api/v1/settings").json()["announcements_enabled"] is True
+        assert client.get("/api/v1/announcements").json() == []

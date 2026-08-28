@@ -28,24 +28,24 @@ Start the controller API and announcement worker together in one process:
 uv run donnietts run
 ```
 
-`run` serves the API on `127.0.0.1:8000` and runs the scheduler (which
-materializes runs from the announcements table, generates speech before each
-scheduled time, and plays it) in the same process. The pieces are also
-available separately for development: `uv run donnietts serve` (API only) and
-`uv run donnietts worker` (scheduler only).
+`run` serves the API on `127.0.0.1:8000` and runs the scheduler. The scheduler
+loads `schedule.yaml`, generates speech before each scheduled time, and plays
+it. The pieces are also available separately for development: `uv run
+donnietts serve` (API only) and `uv run donnietts worker` (scheduler only).
 
-The controller creates its database schema and default settings automatically on
-startup, so no separate setup step is required.
+YAML is the source of truth for the schedule. SQLite stores pause state, the
+schedule projection used by the worker, and durable run history. The controller
+creates its database schema and default settings automatically on startup.
 
-Inspect its status and persisted settings:
+Inspect its status, YAML, and projected schedule:
 
 ```bash
 curl http://127.0.0.1:8000/api/v1/status
-curl http://127.0.0.1:8000/api/v1/settings
+curl http://127.0.0.1:8000/api/v1/schedule
 curl http://127.0.0.1:8000/api/v1/announcements
 ```
 
-Or read them directly from the database without a running controller:
+Or inspect them without a running controller:
 
 ```bash
 uv run donnietts schedule   # the current schedule
@@ -58,50 +58,61 @@ Pausing keeps the controller and schedule running (the worker skips due runs
 with reason `announcements paused`), so resume is instant. The equivalent API
 is `PATCH /api/v1/settings` with `{"announcements_enabled": false}`.
 
-Pause announcements or update the IANA timezone:
+Pause announcements through the operational settings API:
 
 ```bash
 curl -X PATCH http://127.0.0.1:8000/api/v1/settings \
   -H 'Content-Type: application/json' \
   -d '{"announcements_enabled": false}'
-
-curl -X PATCH http://127.0.0.1:8000/api/v1/settings \
-  -H 'Content-Type: application/json' \
-  -d '{"timezone": "America/Detroit"}'
 ```
 
-Daily times are interpreted in this timezone. One-off announcements require an RFC 3339 timestamp with a UTC offset and are stored in UTC.
+Edit `schedule.yaml` directly with `vim`, or use the Schedule tab in the web UI.
+The worker notices valid external edits on its next scheduling pass. Invalid
+external YAML degrades readiness but leaves the last valid schedule running.
 
-Create announcements:
+```yaml
+version: 1
+timezone: America/Detroit
 
-```bash
-curl -X POST http://127.0.0.1:8000/api/v1/announcements/daily \
-  -H 'Content-Type: application/json' \
-  -d '{"time":"07:30","template":"Good morning. It is {time}.","lead_seconds":300}'
+defaults:
+  lead_seconds: 300
 
-curl -X POST http://127.0.0.1:8000/api/v1/announcements/one-off \
-  -H 'Content-Type: application/json' \
-  -d '{"run_at":"2030-01-01T14:30:00-05:00","template":"Leave for the appointment soon."}'
+announcements:
+  - time: "07:30"
+    template: Good morning. It is {time}.
+
+  - run_at: "2030-01-01T14:30:00-05:00"
+    lead_seconds: 600
+    template: Leave for the appointment soon.
 ```
 
-Edits require the current `revision` and increment it when successful. Stale edits and deletes return `409 Conflict`.
+Each announcement specifies exactly one of `time` (a daily `HH:MM` time in the
+configured IANA timezone) or `run_at` (an RFC 3339 timestamp with an offset).
+`enabled` defaults to true. `lead_seconds` can be set globally or per item; the
+older `lead_minutes` spelling is also accepted. Duplicate daily or one-off
+times are rejected.
 
-```bash
-curl -X PATCH http://127.0.0.1:8000/api/v1/announcements/15 \
-  -H 'Content-Type: application/json' \
-  -d '{"expected_revision":1,"enabled":false}'
-
-curl -X DELETE 'http://127.0.0.1:8000/api/v1/announcements/15?expected_revision=2'
-```
+The raw-file API is `GET`/`PUT /api/v1/schedule`. Saves validate the complete
+file and use the response ETag with `If-Match` to prevent overwriting a newer
+server-side edit.
 
 Supported template fields are `time`, `weekday`, `date`, `location`, `city`, `state`, `latitude`, `longitude`, `weather_condition`, `current_temp`, `high_temp`, `low_temp`, `wind`, `wind_speed`, and `precip_chance`.
 
 The controller stays available and reports `degraded` if the speech service is unavailable.
-Its readiness endpoint returns `503` if its database is unavailable.
+Its readiness endpoint returns `503` if the database is unavailable or the YAML schedule is missing or invalid.
 
 The controller defaults to `http://127.0.0.1:8101/v1` using the `qwen3-tts-0.6b` model and `announcer` voice.
 
 The SQLite database defaults to `~/.local/state/donnietts/donnietts.sqlite3`. Override it with `DONNIETTS_DB_PATH`.
+
+To do a one-time export from a database-backed installation before switching
+to YAML:
+
+```bash
+uv run scripts/export-schedule.py --output schedule.yaml --force
+```
+
+Use `--database PATH` when the old database is not at the default location.
 
 ## Context and audio configuration
 
@@ -110,6 +121,7 @@ template uses those fields:
 
 - `DONNIETTS_DISPLAY_CITY` / `DONNIETTS_DISPLAY_STATE`: spoken location name; defaults to `edwardsburg, michigan`
 - `DONNIETTS_USER_AGENT`: user agent for context lookups; defaults to `chime-announcement/0.1`
+- `DONNIETTS_SCHEDULE_PATH`: YAML schedule path; defaults to `schedule.yaml` in the working directory
 - `DONNIETTS_FETCH_TIMEOUT_SECONDS`: context lookup timeout; defaults to `20`
 - `DONNIETTS_CHIME_AUDIO` / `DONNIETTS_SOUND_OFF_AUDIO`: chime and closing sound paths; default to `assets/startup3.mp3` and `assets/sound_off.mp3`
 
@@ -154,7 +166,7 @@ journalctl --user -u donnietts -f
 ```
 
 To stop things: `systemctl --user stop donnietts` stops the controller and
-worker (schedule and history stay in the database);
+worker (the YAML schedule and SQLite run history remain on disk);
 `systemctl --user stop donnietts-speech` unloads the speech model and frees
 its memory — while it is stopped, due announcements are skipped. To pause
 announcements without stopping anything, use `uv run donnietts pause`.
@@ -172,8 +184,8 @@ FastAPI app, and only reachable from the machine itself):
 - **Status** — controller health, a pause/resume switch for announcements, the
   speech service's state (ready / warming / unavailable), and the next few
   upcoming announcements (shown in the controller's timezone).
-- **Schedule** — add, enable/disable, edit, and delete daily and one-off
-  announcements; template text is validated exactly like the API's.
+- **Schedule** — a monospace YAML editor with Save and Reload controls. It
+  edits the same file that can be changed directly with `vim` on the server.
 - **Runs** — recent run history with status and outcome (what was spoken, or
   why a run was skipped or failed).
 

@@ -33,7 +33,6 @@
               <wa-switch id="mode-toggle"></wa-switch>
             </div>
             <p id="mode-hint" class="hint"></p>
-            <wa-button id="test-voice" variant="brand" size="s">Test voice now</wa-button>
           </wa-card>
 
           <wa-card class="card">
@@ -63,31 +62,19 @@
       </wa-tab-panel>
 
       <wa-tab-panel name="schedule">
-        <wa-card class="card">
-          <h2 slot="header" class="card-title">Add announcement</h2>
-          <form id="add-form" class="add-form">
-            <wa-select id="add-kind" label="Type">
-              <wa-option value="daily" selected>Daily</wa-option>
-              <wa-option value="one_off">One-off</wa-option>
-            </wa-select>
-            <wa-input id="add-time" label="Time" type="time" value="09:00"></wa-input>
-            <wa-input id="add-runat" label="When" type="datetime-local" hidden></wa-input>
-            <wa-input id="add-lead" label="Lead (sec)" type="number" min="0" value="300"></wa-input>
-            <wa-checkbox id="add-enabled" checked>Enabled</wa-checkbox>
-            <wa-textarea id="add-template" class="wide" label="Template" rows="3"
-              placeholder="What Donnie should say"></wa-textarea>
-            <wa-button type="submit" variant="brand" id="add-submit">Add</wa-button>
-          </form>
-        </wa-card>
-
-        <wa-card class="card">
-          <h2 slot="header" class="card-title">Schedule</h2>
-          <wa-button slot="header-actions" id="refresh-schedule" variant="neutral" size="s">refresh</wa-button>
-          <div id="schedule-empty" class="empty" hidden>No announcements yet.</div>
-          <table id="schedule-table" class="data-table" hidden>
-            <thead><tr><th></th><th>Time</th><th>Template</th><th>Lead</th><th>Changed</th><th></th></tr></thead>
-            <tbody></tbody>
-          </table>
+        <wa-card class="card schedule-card">
+          <h2 slot="header" class="card-title">Schedule YAML</h2>
+          <div slot="header-actions" class="editor-actions">
+            <span id="schedule-dirty" class="subtle" hidden>unsaved changes</span>
+            <wa-button id="reload-schedule" variant="neutral" size="s">Reload</wa-button>
+            <wa-button id="save-schedule" variant="brand" size="s">Save</wa-button>
+          </div>
+          <p class="schedule-help">
+            Edit the YAML below or edit <code id="schedule-path">schedule.yaml</code> directly on the server.
+          </p>
+          <wa-callout id="schedule-error" variant="danger" hidden></wa-callout>
+          <textarea id="schedule-editor" class="schedule-editor" aria-label="Schedule YAML"
+            wrap="off" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
         </wa-card>
       </wa-tab-panel>
 
@@ -104,22 +91,6 @@
       </wa-tab-panel>
     </wa-tab-group>
   </main>
-
-  <wa-dialog id="edit-dialog" label="Edit announcement">
-    <form id="edit-form" class="edit-form">
-      <input id="edit-id" type="hidden">
-      <input id="edit-revision" type="hidden">
-      <wa-checkbox id="edit-enabled">Enabled</wa-checkbox>
-      <wa-input id="edit-time" label="Time" type="time"></wa-input>
-      <wa-input id="edit-runat" label="When" type="datetime-local" hidden></wa-input>
-      <wa-input id="edit-lead" label="Lead (sec)" type="number" min="0"></wa-input>
-      <wa-textarea id="edit-template" class="wide" label="Template" rows="4"></wa-textarea>
-      <div class="dialog-actions">
-        <wa-button id="edit-cancel" variant="neutral" data-dialog="close">Cancel</wa-button>
-        <wa-button type="submit" variant="brand" id="edit-save">Save</wa-button>
-      </div>
-    </form>
-  </wa-dialog>
 
   <wa-callout id="toast" class="toast" hidden></wa-callout>
   <script type="module" src="/app.js"></script>

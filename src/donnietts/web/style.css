@@ -86,11 +86,29 @@ wa-card::part(header) { display: flex; align-items: center; justify-content: spa
 .next-text { color: var(--app-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .next-when { color: var(--app-muted); font-size: 12px; flex: none; }
 
-/* forms */
-.add-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; align-items: end; }
-.add-form .wide, .edit-form .wide { grid-column: 1 / -1; }
-.edit-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; align-items: end; }
-.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; grid-column: 1 / -1; }
+/* YAML schedule editor */
+.editor-actions { display: flex; align-items: center; gap: 8px; }
+.schedule-help { margin: 0 0 12px; color: var(--app-muted); font-size: 13px; }
+.schedule-help code { font-family: var(--wa-font-mono); color: var(--app-text); }
+.schedule-error { margin-bottom: 12px; }
+.schedule-editor {
+  display: block;
+  width: 100%;
+  min-height: 65vh;
+  resize: vertical;
+  border: 1px solid #cfd4dc;
+  border-radius: 6px;
+  padding: 14px 16px;
+  background: #101419;
+  color: #e8edf3;
+  caret-color: #fff;
+  font: 13px/1.55 var(--wa-font-mono);
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+}
+.schedule-editor:focus { outline: 2px solid var(--wa-color-brand-50); outline-offset: 1px; }
+.schedule-editor[disabled] { opacity: .65; }
 
 /* tables (Web Awesome has no table component) */
 .data-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }

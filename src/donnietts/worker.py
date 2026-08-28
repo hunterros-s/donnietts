@@ -22,6 +22,7 @@ from donnietts.audio import play_wav_file
 from donnietts.context import CONTEXT_SETTINGS, ContextSettings
 from donnietts.database import ApplicationSettingsSnapshot, Database
 from donnietts.rendering import render_template
+from donnietts.schedule import ScheduleError, ScheduleStore
 from donnietts.settings import ControllerSettings, SpeechSettings
 from donnietts.speech_client import OpenAICompatibleSpeechClient
 
@@ -59,6 +60,7 @@ class AnnouncementWorker:
         play_late_grace_seconds: float = 120.0,
         poll_interval_seconds: float = 30.0,
         now_provider: NowProvider | None = None,
+        schedule_store: ScheduleStore | None = None,
     ):
         self.database = database
         self.speech_client = OpenAICompatibleSpeechClient(http_client, speech_settings)
@@ -70,6 +72,7 @@ class AnnouncementWorker:
         self.play_late_grace_seconds = play_late_grace_seconds
         self.poll_interval_seconds = poll_interval_seconds
         self._now = now_provider or (lambda: datetime.now(UTC))
+        self.schedule_store = schedule_store
 
     @property
     def runs(self) -> AnnouncementRunRepository:
@@ -82,6 +85,13 @@ class AnnouncementWorker:
         """Perform one scheduling pass: recover, materialize, process."""
         now = self.now()
         await self._recover_stale_runs(now)
+        if self.schedule_store is not None:
+            try:
+                schedule = await asyncio.to_thread(self.schedule_store.load)
+            except ScheduleError as error:
+                logger.warning("Keeping last valid schedule: %s", error)
+            else:
+                await self.database.sync_schedule(schedule)
         application_settings = await self.database.get_application_settings()
         await self._materialize_runs(now, application_settings)
         await self._process_due_runs(now, application_settings)
@@ -325,6 +335,7 @@ async def run_worker(
     """Wire a controller configuration to a worker and run it until cancelled."""
     database = Database(settings)
     try:
+        await database.initialize()
         async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as http_client:
             worker = AnnouncementWorker(
                 database,
@@ -334,6 +345,7 @@ async def run_worker(
                 poll_interval_seconds=(
                     poll_interval_seconds if poll_interval_seconds is not None else 30.0
                 ),
+                schedule_store=ScheduleStore(settings.resolved_schedule_path),
             )
             await worker.run()
     finally:

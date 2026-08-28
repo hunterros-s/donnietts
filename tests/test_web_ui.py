@@ -3,6 +3,9 @@ def test_index_served(client) -> None:
     assert response.status_code == 200
     assert "DonnieTTS" in response.text
     assert 'src="/app.js"' in response.text
+    assert 'id="schedule-editor"' in response.text
+    assert 'id="save-schedule"' in response.text
+    assert "Add announcement" not in response.text
 
 
 def test_static_assets_served(client) -> None:

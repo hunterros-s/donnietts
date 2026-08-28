@@ -12,6 +12,10 @@ def default_database_path() -> Path:
     return state_home / "donnietts" / "donnietts.sqlite3"
 
 
+def default_schedule_path() -> Path:
+    return Path("schedule.yaml").resolve()
+
+
 def derive_local_health_url(base_url: str) -> str | None:
     parsed = urlsplit(base_url)
     if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
@@ -61,15 +65,27 @@ class SpeechSettings:
 class ControllerSettings:
     speech: SpeechSettings
     database_path: Path
+    schedule_path: Path | None = None
 
     @classmethod
     def from_environment(cls) -> "ControllerSettings":
         configured_path = os.getenv("DONNIETTS_DB_PATH")
         database_path = Path(configured_path).expanduser() if configured_path else default_database_path()
+        configured_schedule = os.getenv("DONNIETTS_SCHEDULE_PATH")
+        schedule_path = (
+            Path(configured_schedule).expanduser().resolve()
+            if configured_schedule
+            else default_schedule_path()
+        )
         return cls(
             speech=SpeechSettings.from_environment(),
             database_path=database_path,
+            schedule_path=schedule_path,
         )
+
+    @property
+    def resolved_schedule_path(self) -> Path:
+        return self.schedule_path or default_schedule_path()
 
     @property
     def database_url(self) -> str:

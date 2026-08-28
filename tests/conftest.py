@@ -6,11 +6,14 @@ from fastapi.testclient import TestClient
 
 from donnietts.app import create_app
 from donnietts.database import Database
+from donnietts.schedule import EMPTY_SCHEDULE
 from donnietts.settings import ControllerSettings, SpeechSettings
 
 
 @pytest.fixture
 def controller_settings(tmp_path) -> ControllerSettings:
+    schedule_path = tmp_path / "schedule.yaml"
+    schedule_path.write_text(EMPTY_SCHEDULE, encoding="utf-8")
     return ControllerSettings(
         speech=SpeechSettings(
             base_url="http://speech.invalid/v1",
@@ -23,6 +26,7 @@ def controller_settings(tmp_path) -> ControllerSettings:
             status_timeout_seconds=0.1,
         ),
         database_path=tmp_path / "controller.sqlite3",
+        schedule_path=schedule_path,
     )
 
 

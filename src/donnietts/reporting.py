@@ -6,6 +6,7 @@ from donnietts.database import (
     ApplicationSettingsSnapshot,
     Database,
 )
+from donnietts.schedule import ScheduleStore
 from donnietts.settings import ControllerSettings
 
 
@@ -41,8 +42,9 @@ async def schedule_text(settings: ControllerSettings) -> str:
     database = Database(settings)
     try:
         await database.initialize()
+        schedule = ScheduleStore(settings.resolved_schedule_path).load()
+        announcements = await database.sync_schedule(schedule)
         application_settings = await database.get_application_settings()
-        announcements = await database.list_announcements()
     finally:
         await database.close()
 

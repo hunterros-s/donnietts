@@ -7,6 +7,7 @@ import httpx
 import uvicorn
 
 from donnietts.database import Database
+from donnietts.schedule import ScheduleStore
 from donnietts.settings import ControllerSettings
 from donnietts.worker import AnnouncementWorker
 
@@ -57,6 +58,7 @@ async def run_controller(
             http_client=http_client,
             audio_dir=settings.audio_dir,
             poll_interval_seconds=poll_interval_seconds,
+            schedule_store=ScheduleStore(settings.resolved_schedule_path),
         )
         api_task = asyncio.create_task(server.serve())
         worker_task = asyncio.create_task(worker.run())

@@ -5,6 +5,7 @@ from pathlib import Path
 import httpx
 
 from donnietts.database import Database
+from donnietts.schedule import ScheduleStore
 from donnietts.settings import ControllerSettings, SpeechSettings
 from donnietts.worker import AnnouncementWorker
 
@@ -305,6 +306,94 @@ def test_worker_skips_a_ready_run_played_too_late(
             assert current.status == "skipped"
             assert current.outcome_reason == "missed playback window"
             assert played == []
+        finally:
+            await database.close()
+
+    asyncio.run(exercise())
+
+
+def test_worker_keeps_last_valid_projection_when_yaml_is_invalid(
+    initialized_settings: ControllerSettings,
+) -> None:
+    async def exercise() -> None:
+        clock = FakeClock(MORNING - timedelta(minutes=5))
+        database = await utc_database(initialized_settings)
+        try:
+            initialized_settings.resolved_schedule_path.write_text(
+                """timezone: UTC
+announcements:
+  - time: "08:00"
+    template: It is {time}.
+""",
+                encoding="utf-8",
+            )
+            worker, played = await make_worker(
+                database,
+                clock,
+                speech_transport(),
+                audio_dir=initialized_settings.audio_dir,
+            )
+            worker.schedule_store = ScheduleStore(initialized_settings.resolved_schedule_path)
+            await worker.reconcile()
+            ready = (await database.runs.list_all())[0]
+
+            initialized_settings.resolved_schedule_path.write_text(
+                "announcements: [",
+                encoding="utf-8",
+            )
+            clock.advance(timedelta(minutes=5, seconds=5))
+            await worker.reconcile()
+
+            assert (await database.runs.get(ready.id)).status == "completed"
+            assert played == [ready.audio_path]
+        finally:
+            await database.close()
+
+    asyncio.run(exercise())
+
+
+def test_worker_reloads_yaml_and_regenerates_a_pending_run(
+    initialized_settings: ControllerSettings,
+) -> None:
+    async def exercise() -> None:
+        clock = FakeClock(MORNING - timedelta(minutes=5))
+        database = await utc_database(initialized_settings)
+        try:
+            initialized_settings.resolved_schedule_path.write_text(
+                """version: 1
+timezone: UTC
+announcements:
+  - time: "08:00"
+    template: First {time}.
+""",
+                encoding="utf-8",
+            )
+            worker, _ = await make_worker(
+                database,
+                clock,
+                speech_transport(),
+                audio_dir=initialized_settings.audio_dir,
+            )
+            worker.schedule_store = ScheduleStore(initialized_settings.resolved_schedule_path)
+            await worker.reconcile()
+            first = (await database.runs.list_all())[0]
+            assert first.status == "ready"
+            assert first.rendered_text == "First eight o'clock A M."
+
+            initialized_settings.resolved_schedule_path.write_text(
+                """version: 1
+timezone: UTC
+announcements:
+  - time: "08:00"
+    template: Updated {time}.
+""",
+                encoding="utf-8",
+            )
+            await worker.reconcile()
+            runs = await database.runs.list_all()
+            assert len(runs) == 1
+            assert runs[0].status == "ready"
+            assert runs[0].rendered_text == "Updated eight o'clock A M."
         finally:
             await database.close()
 

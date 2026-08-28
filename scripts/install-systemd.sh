@@ -76,4 +76,4 @@ else
 fi
 
 echo
-echo "Optional overrides go in ~/.config/donnietts/env (e.g. TTS_BASE_URL=..., DONNIETTS_DB_PATH=...)."
+echo "Optional overrides go in ~/.config/donnietts/env (e.g. TTS_BASE_URL=..., DONNIETTS_DB_PATH=..., DONNIETTS_SCHEDULE_PATH=...)."
