@@ -68,6 +68,13 @@ def create_app(settings: ControllerSettings | None = None) -> FastAPI:
     app.state.controller_settings = controller_settings
     app.state.schedule_store = schedule_store
 
+    @app.middleware("http")
+    async def prevent_stale_web_assets(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path in {"/", "/index.html", "/app.js", "/style.css"}:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        return response
+
     async def read_application_settings() -> ApplicationSettingsSnapshot:
         try:
             return await database.get_application_settings()
